@@ -33,15 +33,20 @@ Your goal is NOT to rephrase or summarize the given text. Your goal is to produc
 
 LANGUAGE:
 - Write ONLY in English. Never include words or characters from any other language.
-""" + TITLE_RULE + VALUE_HANDLING + VALUE_HANDLING + """
+""" + TITLE_RULE + VALUE_HANDLING + """
 The note must NEVER look like course notes, a ChatGPT answer, a blog post, a Wikipedia article, or a lesson explanation. It must read like a reference page written by a senior professional.
 
 CONTENT RULES:
 - Preserve ALL technical methodology from the source: every attack step, technique, command structure, request/response pattern, parameter, error-message meaning, and practical observation.
-- When the source shows a concrete example (a request, a payload, a response), reproduce its STRUCTURE and FORMAT, using placeholders for one-time values as described above.
+- This is a reference for LEARNING and long-term understanding, not just a command list. For each technique or step, explain not only WHAT it does but WHY it works and the underlying mechanism, whenever the source provides or implies this reasoning.
+- Preserve the conceptual "why" behind each step: the purpose of a parameter, what a response reveals, why an attack succeeds, what a mechanism protects against. This reasoning is the most valuable long-term content.
+- When the source shows a concrete example (a request, a payload, a response), reproduce its STRUCTURE and FORMAT, using placeholders for one-time values as described above. Explain what the example demonstrates.
 - Keep each step bound to its own context and correct order. Never distort the logic or what an observation proves.
-- Only add outside knowledge if genuinely necessary to complete the topic. NEVER invent attack techniques, CVEs, bypass methods, or tools not present in the source.
-- Remove filler: no motivation, no generic talk, no empty explanations, no repetition, no course-style narration ("we will see", "let's try", "going back to our", "as we can see").
+- Be comprehensive in substance but economical in words: include every piece of technical value and reasoning, but express each point once, clearly. Depth of content does not mean repetition or padding.
+- You may enrich the note with accurate, directly relevant technical knowledge beyond the source (e.g. a closely related flag, a standard detail, the reason a mechanism behaves as it does), when you are confident it is correct and it genuinely completes the topic. Prefer well-established, standard facts.
+- When you add information not present in the source, it must be technically correct and relevant. NEVER fabricate CVEs, version numbers, exploit details, tool behaviors, or attack techniques you are not confident about. If unsure, omit it rather than guess.
+- Do not pad the note with tangential or generic knowledge. Additions must serve the specific topic, not broaden it into unrelated areas.
+- Remove filler: no motivation, no generic talk, no empty course-style narration ("we will see", "let's try", "going back to our", "as we can see"). Filler is different from reasoning - keep the technical "why", remove only empty words.
 
 STRUCTURE RULES:
 - Organize information logically and systematically, not step-by-step like a tutorial transcript.
@@ -75,7 +80,7 @@ You are given TWO structured notes on the same topic: an EXISTING note and a NEW
 
 LANGUAGE:
 - Write ONLY in English. Never include words or characters from any other language.
-""" + TITLE_RULE + VALUE_HANDLING + VALUE_HANDLING + """
+""" + TITLE_RULE + VALUE_HANDLING + """
 MERGE RULES:
 - Do NOT delete any technical methodology from either note. Preserve every unique step, technique, and reasoning.
 - Combine sections covering the same subject into one coherent section. Keep distinct subjects as separate sections.
