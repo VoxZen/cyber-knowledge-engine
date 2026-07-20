@@ -103,21 +103,20 @@ Different note: the new text is about a related but distinct tool, concept, or t
 Respond ONLY with JSON, nothing else:
 {"decision": "SAME"} or {"decision": "DIFFERENT"}"""
 
-
-def decide_same_topic(existing_title, existing_summary, new_text):
+def decide_same_topic(existing_title, existing_summary, new_text, backend=None):
     prompt = f"EXISTING NOTE TITLE: {existing_title}\nEXISTING NOTE SUMMARY: {existing_summary}\n\nNEW TEXT:\n{new_text}"
-    result = llm.ask_json(DECISION_SYSTEM, prompt)
+    result = llm.ask_json(DECISION_SYSTEM, prompt, backend=backend)
     return result.get("decision", "").upper() == "SAME"
 
 
-def generate_validated(system, prompt):
+def generate_validated(system, prompt, backend=None):
     last_error = None
     for attempt in range(config.MAX_RETRIES + 1):
         try:
             current_prompt = prompt
             if last_error:
                 current_prompt = f"{prompt}\n\nYour previous response was rejected: {last_error}\nFix it and respond with valid JSON only."
-            raw = llm.ask_json(system, current_prompt)
+            raw = llm.ask_json(system, current_prompt, backend=backend)
             return Note.model_validate(raw)
         except (ValidationError, ValueError, json.JSONDecodeError) as e:
             last_error = str(e)
@@ -125,13 +124,13 @@ def generate_validated(system, prompt):
     raise RuntimeError(f"Model failed to produce valid output after {config.MAX_RETRIES + 1} attempts. Last error: {last_error}")
 
 
-def create_note(text):
-    return generate_validated(CREATE_SYSTEM, text)
+def create_note(text, backend=None):
+    return generate_validated(CREATE_SYSTEM, text, backend=backend)
 
 
-def merge_two_notes(existing_json, new_json):
+def merge_two_notes(existing_json, new_json, backend=None):
     prompt = f"EXISTING NOTE:\n{json.dumps(existing_json, ensure_ascii=False, indent=2)}\n\nNEW NOTE:\n{json.dumps(new_json, ensure_ascii=False, indent=2)}"
-    return generate_validated(MERGE_SYSTEM, prompt)
+    return generate_validated(MERGE_SYSTEM, prompt, backend=backend)
 
 CATEGORY_SYSTEM = """You are a cybersecurity knowledge base classifier.
 Given a note's TITLE and SUMMARY, choose the single best category folder for it.
@@ -154,14 +153,14 @@ Rules:
 - Respond ONLY with JSON, nothing else: {"category": "04 Web"}"""
 
 
-def choose_category(title, summary):
+def choose_category(title, summary, backend=None):
     prompt = f"TITLE: {title}\nSUMMARY: {summary}"
     valid = {
         "00 Inbox", "01 Networking", "02 Linux", "03 Windows", "04 Web",
         "05 Active Directory", "06 Cloud", "07 Programming", "08 Tools", "09 Methodology",
     }
     try:
-        result = llm.ask_json(CATEGORY_SYSTEM, prompt)
+        result = llm.ask_json(CATEGORY_SYSTEM, prompt, backend=backend)
         category = result.get("category", "").strip()
         if category in valid:
             return category

@@ -49,3 +49,16 @@ def remove_entry(slug):
     if slug in index:
         del index[slug]
         save_index(index)
+
+
+def find_top_matches(text, limit=5):
+    index = load_index()
+    if not index:
+        return []
+    query_vec = llm.embed(text)
+    scored = []
+    for slug, entry in index.items():
+        score = similarity(query_vec, entry["vector"])
+        scored.append((slug, entry.get("title", slug), entry.get("category", "?"), score))
+    scored.sort(key=lambda x: x[3], reverse=True)
+    return scored[:limit]

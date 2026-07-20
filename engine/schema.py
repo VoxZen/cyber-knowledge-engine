@@ -1,9 +1,19 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class Section(BaseModel):
     heading: str
     content: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_title_as_heading(cls, data):
+        if isinstance(data, dict):
+            if "heading" not in data and "title" in data:
+                data["heading"] = data["title"]
+            if "content" not in data and "body" in data:
+                data["content"] = data["body"]
+        return data
 
     @field_validator("heading")
     @classmethod
@@ -31,6 +41,14 @@ class Note(BaseModel):
     title: str
     summary: str
     sections: list[Section]
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_missing_summary(cls, data):
+        if isinstance(data, dict):
+            if not data.get("summary") and data.get("title"):
+                data["summary"] = data["title"]
+        return data
 
     @field_validator("title", "summary")
     @classmethod

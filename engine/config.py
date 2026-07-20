@@ -12,4 +12,15 @@ EMBED_MODEL = "nomic-embed-text"
 
 CANDIDATE_THRESHOLD = 0.60
 MAX_RETRIES = 2
+NUM_CTX = 8192
+REQUEST_TIMEOUT = 2400
 
+# --- Backend selection ---
+# "local" = Ollama (14B, offline), "api" = NVIDIA cloud (DeepSeek)
+DEFAULT_BACKEND = "api"
+
+# --- NVIDIA API settings ---
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+API_MODEL = "deepseek-ai/deepseek-v4-flash"
+API_NUM_CTX = 131072
+API_TIMEOUT = 600

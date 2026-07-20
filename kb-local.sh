@@ -1,6 +1,8 @@
 #!/bin/bash
 
-TMPFILE=$(mktemp /tmp/kb-note-XXXXXX.txt)
+TMPFILE=$(mktemp /tmp/kb-note-XXXXXX)
+mv "$TMPFILE" "$TMPFILE.md"
+TMPFILE="$TMPFILE.md"
 
 nano "$TMPFILE"
 
@@ -12,6 +14,6 @@ fi
 
 cd ~/cke
 source venv/bin/activate
-python3 -m engine.cli --file "$TMPFILE"
+python3 -m engine.cli "$@" --file "$TMPFILE"
 
 rm -f "$TMPFILE"
