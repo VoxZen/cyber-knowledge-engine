@@ -50,6 +50,13 @@ STRUCTURE RULES:
 - Use code blocks (```) ONLY for actual code, commands, configuration, HTTP requests/responses, or structured data.
 - Markdown must be simple, clean, and professional.
 
+QUICK REFERENCE SECTION:
+- End the note with a final section titled "Quick Reference".
+- This section is a concise, scannable cheat-sheet of the most important practical commands, syntax, or steps from the note, for fast lookup during real work.
+- Include ONLY commands, syntax patterns, or short actionable points that actually appear in or directly follow from the source. Never invent commands for this section.
+- Use a code block for commands and keep each entry short. Do not repeat long explanations here - this is a quick lookup, not a summary.
+- If the note contains no commands or practical syntax (e.g. it is purely conceptual), omit the Quick Reference section entirely rather than filling it with prose.
+
 Respond ONLY with JSON in this exact format, nothing else:
 
 {
