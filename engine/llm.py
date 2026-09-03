@@ -14,10 +14,10 @@ _api_client = None
 def get_api_client():
     global _api_client
     if _api_client is None:
-        api_key = os.environ.get("NVIDIA_API_KEY")
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
             raise RuntimeError("NVIDIA_API_KEY not found. Check your .env file.")
-        _api_client = OpenAI(base_url=config.NVIDIA_BASE_URL, api_key=api_key)
+        _api_client = OpenAI(base_url=config.API_BASE_URL, api_key=api_key)
     return _api_client
 
 
@@ -63,7 +63,6 @@ def _ask_json_api(system, prompt):
         temperature=0.2,
         top_p=0.95,
         max_tokens=32768,
-        extra_body={"chat_template_kwargs": {"thinking": False}},
         stream=False,
     )
     raw = completion.choices[0].message.content

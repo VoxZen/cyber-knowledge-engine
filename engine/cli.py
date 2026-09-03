@@ -60,9 +60,128 @@ class Spinner:
         if self.thread:
             self.thread.join()
 
+def handle_split(backend, text):
+    from engine.main import propose_split_plan, process_from_plan
+
+    text = text.strip()
+    if len(text) < 100:
+        print(f"\nInput too short ({len(text)} chars) for splitting. Nothing saved.")
+        return
+
+    label = "DeepSeek (API)" if backend == "api" else "local 14B"
+    print("-" * 50)
+    print(f"Analyzing {len(text)} characters with {label}...")
+
+    spinner = Spinner(f"Proposing atomic notes with {label}")
+    spinner.start()
+    try:
+        plan = propose_split_plan(text, backend=backend)
+    except Exception as e:
+        spinner.stop()
+        print(f"ERROR during planning: {e}")
+        return
+    spinner.stop()
+
+    if not plan:
+        print("No notes proposed. Nothing saved.")
+        return
+
+    while True:
+        print("\nProposed atomic notes:")
+        for i, note in enumerate(plan, 1):
+            print(f"  {i}. {note['title']}  [{note.get('type', '?')}]")
+            print(f"       {note.get('covers', '')}")
+        print("\nOptions:")
+        print("  - Press Enter to CREATE all notes as shown")
+        print("  - Type 'merge 2 3' to combine notes 2 and 3 into one")
+        print("  - Type 'drop 4' to remove note 4")
+        print("  - Type 'cancel' to abort")
+        choice = input("\nYour choice: ").strip().lower()
+
+        if choice == "":
+            break
+        elif choice == "cancel":
+            print("Cancelled. Nothing saved.")
+            return
+        elif choice.startswith("merge"):
+            nums = [int(n) for n in choice.split()[1:] if n.isdigit()]
+            if len(nums) >= 2:
+                nums = sorted(set(nums), reverse=True)
+                targets = [plan[n - 1] for n in sorted(nums) if 1 <= n <= len(plan)]
+                if len(targets) >= 2:
+                    merged_title = targets[0]["title"]
+                    merged_covers = " ".join(t.get("covers", "") for t in targets)
+                    merged_hint = " ".join(t.get("source_hint", "") for t in targets)
+                    for n in nums:
+                        if 1 <= n <= len(plan):
+                            del plan[n - 1]
+                    plan.insert(0, {"title": merged_title, "type": "technique",
+                                     "covers": merged_covers, "source_hint": merged_hint})
+                    print(f"Merged into: {merged_title}")
+        elif choice.startswith("drop"):
+            nums = [int(n) for n in choice.split()[1:] if n.isdigit()]
+            for n in sorted(set(nums), reverse=True):
+                if 1 <= n <= len(plan):
+                    removed = plan.pop(n - 1)
+                    print(f"Dropped: {removed['title']}")
+        else:
+            print("Did not understand. Try again.")
+
+    print("-" * 50)
+    print(f"Creating {len(plan)} note(s)...")
+    created = []
+    for note in plan:
+        spinner = Spinner(f"Writing '{note['title']}'")
+        spinner.start()
+        try:
+            slug, category = process_from_plan(text, note, backend=backend)
+            spinner.stop()
+            print(f"  created: {category}/{slug}.md")
+            created.append(slug)
+        except Exception as e:
+            spinner.stop()
+            print(f"  ERROR on '{note['title']}': {e}")
+    print("-" * 50)
+    print(f"Done. Created {len(created)} note(s).")
+
+def handle_delete():
+    from engine.main import list_all_notes, delete_note_by_slug
+    notes = list_all_notes()
+    if not notes:
+        print("No notes found. Nothing to delete.")
+        return
+    print("-" * 50)
+    print("All notes:")
+    for i, (slug, category) in enumerate(notes, 1):
+        print(f"  {i}. {slug}  ({category})")
+    print("  0. Cancel")
+    choice = input(f"\nDelete which note? (0-{len(notes)}): ").strip()
+    try:
+        choice = int(choice)
+    except ValueError:
+        choice = 0
+    if choice == 0:
+        print("Cancelled. Nothing deleted.")
+        return
+    if 1 <= choice <= len(notes):
+        target_slug = notes[choice - 1][0]
+        confirm = input(f"Delete '{target_slug}'? This cannot be undone. (yes/no): ").strip().lower()
+        if confirm == "yes":
+            delete_note_by_slug(target_slug)
+            print(f"Deleted: {target_slug}.md")
+        else:
+            print("Cancelled. Nothing deleted.")
+    else:
+        print("Invalid choice. Nothing deleted.")
+
 
 def run():
     args = sys.argv[1:]
+
+    if "--delete" in args:
+        handle_delete()
+        return
+
 
     backend = "api"
     if "--local" in args:
@@ -72,6 +191,37 @@ def run():
             print("ERROR: Cannot reach Ollama. Start the Ollama app first.")
             sys.exit(1)
 
+    if "--split" in args:
+       args = [a for a in args if a != "--split"]
+       split_text = get_input_text(args)
+       handle_split(backend, split_text)
+       return
+    
+
+    
+    if "--writeup" in args:
+        args = [a for a in args if a != "--writeup"]
+        from engine.main import process_writeup
+        writeup_text = get_input_text(args).strip()
+        if len(writeup_text) < 100:
+            print(f"\nInput too short ({len(writeup_text)} chars) for a writeup. Nothing saved.")
+            return
+        label = "DeepSeek (API)" if backend == "api" else "local 14B"
+        print("-" * 50)
+        print(f"Processing writeup ({len(writeup_text)} chars) with {label}...")
+        spinner = Spinner(f"Writing up with {label}")
+        spinner.start()
+        try:
+            slug = process_writeup(writeup_text, backend=backend)
+            spinner.stop()
+            print("-" * 50)
+            print(f"Done. Writeup saved as: {slug}.md")
+        except Exception as e:
+            spinner.stop()
+            print(f"ERROR: {e}")
+            sys.exit(1)
+        return      
+   
     do_merge = False
     if "--merge" in args:
         do_merge = True

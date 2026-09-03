@@ -5,11 +5,14 @@ from engine.schema import Note
 
 TITLE_RULE = """
 TITLE RULE:
-- The title must be short, precise, and canonical - the name of the topic itself, not a description of the note's contents.
-- Maximum 5 words. Prefer the standard name of the technique, tool, or concept.
-- Good: "IDOR in Insecure APIs", "SQL Injection", "Kerberoasting", "SUID Privilege Escalation".
-- Bad: "IDOR in Insecure APIs: Identification, Exploitation, and Chaining for Privilege Escalation".
-- Do not list what the note covers in the title. Just name the topic.
+- The title names the topic, using the standard/canonical term as its core, optionally with a short qualifier for context. It is not a full description of the note's contents.
+- Keep it concise: roughly 2 to 5 words. Lead with the main keyword so the note is easy to find later.
+- A short descriptive qualifier is good when it adds real context. Avoid long, comma-separated lists of everything the note covers.
+- Never use a colon followed by a list of subtopics.
+- Good: "SQL Injection", "UNION-Based SQL Injection", "Nmap Port Scanning", "SUID Privilege Escalation", "HTTP Request Smuggling", "Kerberoasting".
+- Too bare when context helps: "Scanning" (of what?), "Injection" (which kind?).
+- Too much: "SQL Injection: Detection, UNION Exploitation, Blind Techniques, and Mitigation", "Comprehensive Guide to Nmap Scanning Flags and Timing Options".
+- Use the standard name of the technique, tool, or concept as the anchor. Add a qualifier only when it genuinely helps identify the topic.
 """
 
 VALUE_HANDLING = """
@@ -179,3 +182,85 @@ def choose_category(title, summary, backend=None):
     except Exception as e:
         print(f"Category selection failed: {e}")
     return "00 Inbox"
+
+
+
+SPLIT_SYSTEM = """You are an expert cybersecurity knowledge architect organizing raw learning material into a professional personal encyclopedia.
+
+You are given a block of text (usually one or more sections of a hacking course module). Your job is to propose how to split it into ATOMIC encyclopedia notes.
+
+ATOMIC PRINCIPLE - each note covers ONE focused thing:
+- One TOOL gets its own note (e.g. "dig", "gobuster", "nmap"). A note about a tool is about how to use that specific tool.
+- One TECHNIQUE gets its own note (e.g. "Subdomain Enumeration", "DNS Zone Transfers", "Virtual Host Discovery").
+- One CONCEPT gets its own note (e.g. "DNS", "Virtual Hosting", "HTTP").
+- Do NOT merge unrelated things into one note. Do NOT create one giant note covering a whole module.
+- But do NOT over-split: a concept and its immediate small details belong together. Only split when each piece is independently meaningful and worth looking up on its own.
+
+GROUPING GUIDANCE:
+- A tool used within a technique can be its own note if it is significant and reusable (e.g. "dig" deserves its own note even though it is used in DNS enumeration).
+- Closely related sub-steps of ONE technique may belong in a single note (e.g. subdomain bruteforcing details belong inside "Subdomain Enumeration").
+- Think about future lookup: "tomorrow I want to look up X" - each X the user would search for separately should be its own note.
+
+For each proposed note, identify which part(s) of the source text belong to it.
+
+Respond ONLY with JSON in this exact format, nothing else:
+
+{
+  "notes": [
+    {
+      "title": "Proposed note title",
+      "type": "tool | technique | concept",
+      "covers": "one short sentence describing what this note will contain",
+      "source_hint": "which heading(s) or part(s) of the input this note draws from"
+    }
+  ]
+}
+
+Propose the splitting only. Do NOT write the note contents. Respond ONLY with the JSON object."""
+
+
+def propose_split(text, backend=None):
+    result = llm.ask_json(SPLIT_SYSTEM, text, backend=backend)
+    return result.get("notes", [])
+
+
+
+
+WRITEUP_SYSTEM = """You are documenting the solution of a single Hack The Box (or similar) machine into a professional writeup note for a personal knowledge base.
+
+CRITICAL DIFFERENCE FROM ENCYCLOPEDIA NOTES:
+- This is a WRITEUP of ONE specific machine, NOT a general encyclopedia entry. Every machine is different.
+- Do NOT add general background knowledge, theory, or explanations beyond what the source describes. Do NOT expand a topic (e.g. do not explain how Active Directory or Kerberos works in general).
+- Document ONLY what was actually done to solve THIS machine, in the order it was done.
+- If the source mentions a tool (nmap, gobuster, bloodhound), describe how it was used ON THIS MACHINE, not what the tool is in general.
+- The value of a writeup is its specificity and correct sequence. Preserve both faithfully.
+
+LANGUAGE:
+- Write ONLY in English.
+
+VALUE HANDLING:
+- Replace one-time lab-specific values (target IP, discovered flags, session tokens, cracked passwords) with placeholders like <target_ip>, <user_flag>, <root_flag>.
+- KEEP machine-specific technical facts that matter to the solution: open ports, service names and versions, discovered usernames, vulnerable endpoints, the specific exploit or CVE used. These are the substance of the writeup.
+
+STRUCTURE - produce exactly these sections:
+1. "Overview" - a few lines: the machine's OS/platform, difficulty if known, and the main techniques/vulnerabilities involved. A quick orientation.
+2. "Solution Walkthrough" - the step-by-step path from start to finish, in correct order. Use logical sub-stages as headings where natural (e.g. Enumeration, Initial Foothold, Privilege Escalation, Root). For each step: what was done, the command or action, and what it revealed or why it mattered ON THIS MACHINE. Preserve commands and their structure.
+3. "Key Takeaways" - concrete lessons learned FROM THIS SPECIFIC MACHINE, framed as reusable recognition patterns (e.g. "port 88 open indicated a domain controller"). These must be specific observations from this box, NOT general theory dumps about the technology.
+
+Keep it clean and professional: preserve every technical step and command, but do not pad with generic narration or theory.
+
+Respond ONLY with JSON in this exact format, nothing else:
+
+{
+  "title": "Machine name",
+  "summary": "1-2 sentence summary of the machine and the main path to root",
+  "sections": [
+    {"heading": "Section heading", "content": "professional writeup content as markdown"}
+  ]
+}
+
+The "content" field must be a single string. Respond ONLY with the JSON object."""
+
+
+def create_writeup(text, backend=None):
+    return generate_validated(WRITEUP_SYSTEM, text, backend=backend)
