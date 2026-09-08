@@ -1,12 +1,13 @@
 import requests
 import json
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 from engine import config
 
-load_dotenv(config.VAULT.parent / "cke" / ".env")
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 _api_client = None
 
@@ -16,7 +17,7 @@ def get_api_client():
     if _api_client is None:
         api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
-            raise RuntimeError("NVIDIA_API_KEY not found. Check your .env file.")
+            raise RuntimeError("DEEPSEEK_API_KEY not found. Check your .env file.")
         _api_client = OpenAI(base_url=config.API_BASE_URL, api_key=api_key)
     return _api_client
 
