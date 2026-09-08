@@ -22,5 +22,4 @@ DEFAULT_BACKEND = "api"
 # --- NVIDIA API settings ---
 API_BASE_URL = "https://api.deepseek.com"
 API_MODEL = "deepseek-v4-flash"
-API_NUM_CTX = 131072
 API_TIMEOUT = 600

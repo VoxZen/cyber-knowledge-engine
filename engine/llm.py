@@ -18,7 +18,7 @@ def get_api_client():
         api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
             raise RuntimeError("DEEPSEEK_API_KEY not found. Check your .env file.")
-        _api_client = OpenAI(base_url=config.API_BASE_URL, api_key=api_key)
+        _api_client = OpenAI(base_url=config.API_BASE_URL, api_key=api_key, timeout=config.API_TIMEOUT)
     return _api_client
 
 
