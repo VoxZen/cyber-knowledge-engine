@@ -243,7 +243,7 @@ def run():
         spinner.stop()
 
         if not candidates:
-            print("No existing notes found. Creating a new note instead.")
+            print("No sufficiently similar notes found. Creating a new note instead.")
             do_merge = False
         else:
             print("\nSimilar notes found:")

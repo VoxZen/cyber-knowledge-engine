@@ -21,20 +21,6 @@ def similarity(a, b):
     return dot / (norm_a * norm_b)
 
 
-def find_best_match(text):
-    index = load_index()
-    if not index:
-        return None, 0.0, None
-    query_vec = llm.embed(text)
-    best_slug, best_score = None, 0.0
-    for slug, entry in index.items():
-        score = similarity(query_vec, entry["vector"])
-        if score > best_score:
-            best_slug, best_score = slug, score
-    title = index[best_slug]["title"] if best_slug else None
-    return best_slug, best_score, title
-
-
 def update_entry(slug, title, summary, category="00 Inbox"):
     index = load_index()
     index[slug] = {
@@ -61,4 +47,5 @@ def find_top_matches(text, limit=5):
         score = similarity(query_vec, entry["vector"])
         scored.append((slug, entry.get("title", slug), entry.get("category", "?"), score))
     scored.sort(key=lambda x: x[3], reverse=True)
-    return scored[:limit]
+    relevant = [row for row in scored if row[3] >= config.CANDIDATE_THRESHOLD]
+    return relevant[:limit]
