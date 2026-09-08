@@ -16,10 +16,10 @@ NUM_CTX = 8192
 REQUEST_TIMEOUT = 2400
 
 # --- Backend selection ---
-# "local" = Ollama (14B, offline), "api" = NVIDIA cloud (DeepSeek)
+# "local" = Ollama (14B, offline), "api" = DeepSeek cloud
 DEFAULT_BACKEND = "api"
 
-# --- NVIDIA API settings ---
+# --- DeepSeek API settings ---
 API_BASE_URL = "https://api.deepseek.com"
 API_MODEL = "deepseek-v4-flash"
 API_TIMEOUT = 600
