@@ -21,5 +21,5 @@ DEFAULT_BACKEND = "api"
 
 # --- DeepSeek API settings ---
 API_BASE_URL = "https://api.deepseek.com"
-API_MODEL = "deepseek-v4-flash"
+API_MODEL = "deepseek-flash"
 API_TIMEOUT = 600
