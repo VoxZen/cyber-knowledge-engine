@@ -170,14 +170,10 @@ Rules:
 
 def choose_category(title, summary, backend=None):
     prompt = f"TITLE: {title}\nSUMMARY: {summary}"
-    valid = {
-        "00 Inbox", "01 Networking", "02 Linux", "03 Windows", "04 Web",
-        "05 Active Directory", "06 Cloud", "07 Programming", "08 Tools", "09 Methodology",
-    }
     try:
         result = llm.ask_json(CATEGORY_SYSTEM, prompt, backend=backend)
         category = result.get("category", "").strip()
-        if category in valid:
+        if category in config.CLASSIFIER_CATEGORIES:
             return category
     except Exception as e:
         print(f"Category selection failed: {e}")

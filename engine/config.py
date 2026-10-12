@@ -5,6 +5,16 @@ from pathlib import Path
 VAULT = Path(os.environ.get("CKE_VAULT") or Path.home() / "Documents" / "CyberKB").expanduser()
 INDEX_FILE = VAULT / ".kb_index.json"
 
+# --- Categories ---
+# Folders the classifier may choose (brain.choose_category accepts only these)
+CLASSIFIER_CATEGORIES = [
+    "00 Inbox", "01 Networking", "02 Linux", "03 Windows", "04 Web",
+    "05 Active Directory", "06 Cloud", "07 Programming", "08 Tools", "09 Methodology",
+]
+# Every top-level folder that holds notes: the classifier's folders plus the ones
+# filled by hand or by a mode (kb --writeup writes to 90 Writeups). Other folders are ignored.
+VAULT_CATEGORIES = CLASSIFIER_CATEGORIES + ["90 Writeups", "91 Templates", "99 Archive"]
+
 OLLAMA_BASE = "http://localhost:11434"
 OLLAMA_GEN = "http://localhost:11434/api/generate"
 OLLAMA_EMB = "http://localhost:11434/api/embeddings"

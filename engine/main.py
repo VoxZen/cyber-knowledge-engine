@@ -54,11 +54,8 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
     return new_slug
 
 def list_all_notes():
-    from engine import config
     notes = []
-    for category_dir in sorted(config.VAULT.iterdir()):
-        if not category_dir.is_dir() or category_dir.name.startswith("."):
-            continue
+    for category_dir in vault.category_dirs():
         for md_file in sorted(category_dir.glob("*.md")):
             slug = md_file.stem
             notes.append((slug, category_dir.name))

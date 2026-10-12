@@ -5,11 +5,16 @@ def note_path(slug, category):
     return config.VAULT / category / f"{slug}.md"
 
 
+def category_dirs():
+    """Existing top-level category folders, in config order. Other folders hold no notes."""
+    return [config.VAULT / name for name in config.VAULT_CATEGORIES if (config.VAULT / name).is_dir()]
+
+
 def find_note(slug):
     matches = []
-    for category_dir in sorted(config.VAULT.iterdir()):
+    for category_dir in category_dirs():
         candidate = category_dir / f"{slug}.md"
-        if category_dir.is_dir() and candidate.exists():
+        if candidate.exists():
             matches.append(candidate)
     if len(matches) > 1:
         folders = ", ".join(path.parent.name for path in matches)
