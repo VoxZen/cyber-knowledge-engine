@@ -1,6 +1,8 @@
+import os
 from pathlib import Path
 
-VAULT = Path.home() / "Documents" / "CyberKB"
+# CKE_VAULT overrides the vault location (per machine, and for the tests)
+VAULT = Path(os.environ.get("CKE_VAULT") or Path.home() / "Documents" / "CyberKB").expanduser()
 INDEX_FILE = VAULT / ".kb_index.json"
 
 OLLAMA_BASE = "http://localhost:11434"
