@@ -251,7 +251,7 @@ def run():
         handle_reindex()
         return
 
-    backend = "api"
+    backend = config.DEFAULT_BACKEND
     if "--local" in args:
         backend = "local"
         args = [a for a in args if a != "--local"]

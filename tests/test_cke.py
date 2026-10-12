@@ -642,5 +642,26 @@ class P2_1_SplitPlanTests(VaultTestCase):
         self.assertEqual(self.md_files(), [])
 
 
+# ---------------------------------------------------------------- P2-4
+
+class P2_4_DefaultBackendTests(VaultTestCase):
+    """P2-4: the CLI reads config.DEFAULT_BACKEND, and --local overrides it."""
+
+    def backend_used(self, default, flags):
+        with mock.patch.object(config, "DEFAULT_BACKEND", default), \
+             mock.patch.object(sys, "argv", ["kb", *flags, "nmap scans ports and services on a host"]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(cli, "process", return_value="nmap") as process:
+            cli.run()
+        return process.call_args.kwargs["backend"]
+
+    def test_default_comes_from_config(self):
+        self.assertEqual(self.backend_used("api", []), "api")
+        self.assertEqual(self.backend_used("local", []), "local")
+
+    def test_local_flag_overrides_config(self):
+        self.assertEqual(self.backend_used("api", ["--local"]), "local")
+
+
 if __name__ == "__main__":
     unittest.main()
