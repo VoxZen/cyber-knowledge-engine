@@ -237,22 +237,25 @@ class P0_1_MergeSafetyTests(VaultTestCase):
         self.assertEqual(self.md_files(), ["08 Tools/nmap.md"])
 
     def test_confirmed_rename_writes_new_note_before_deleting_old(self):
-        calls = []
+        seen_at_delete = []
+        real_delete = vault.delete_note
 
-        def track(name, func):
-            def wrapper(*args, **kwargs):
-                calls.append(name)
-                return func(*args, **kwargs)
-            return wrapper
+        def checked_delete(slug):
+            # The moment the old note is removed, the new one must already be on disk and indexed
+            seen_at_delete.append((self.md_files(), set(self.index())))
+            real_delete(slug)
 
-        with mock.patch.object(vault, "write_note", track("write_note", vault.write_note)), \
-             mock.patch.object(vault, "delete_note", track("delete_note", vault.delete_note)), \
-             mock.patch.object(memory, "update_entry", track("update_entry", memory.update_entry)):
+        with mock.patch.object(vault, "delete_note", checked_delete):
             self.merge("Nmap Port Scanning", confirm_rename=lambda old, new: True)
+        self.assertEqual(seen_at_delete, [(["08 Tools/nmap-port-scanning.md", "08 Tools/nmap.md"],
+                                           {"nmap", "nmap-port-scanning"})])
         self.assertEqual(self.md_files(), ["08 Tools/nmap-port-scanning.md"])
         self.assertEqual(set(self.index()), {"nmap-port-scanning"})
-        self.assertGreater(calls.index("delete_note"), calls.index("write_note"))
-        self.assertGreater(calls.index("delete_note"), calls.index("update_entry"))
+
+    def test_cli_never_confirms_without_a_terminal(self):
+        with mock.patch.object(sys, "stdin", io.StringIO()), \
+             mock.patch("builtins.input", side_effect=AssertionError("must not ask")):
+            self.assertFalse(cli.confirm_rename("nmap", "nmap-port-scanning"))
 
     def test_crash_while_indexing_keeps_the_original_note(self):
         llm.embed.side_effect = requests.exceptions.ConnectionError("Ollama is down")

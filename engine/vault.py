@@ -65,15 +65,26 @@ def markdown_to_json(markdown):
     data = {"title": "", "summary": "", "sections": []}
     current = None
     summary_lines = []
+    fence = None  # "```" or "~~~" while inside a fenced code block
     for line in lines:
-        if line.startswith("# "):
+        marker = line.lstrip()[:3]
+        if fence:
+            # Inside a code block every line is content; only the same marker closes it
+            if marker == fence:
+                fence = None
+        elif marker in ("```", "~~~"):
+            fence = marker
+        elif line.startswith("# ") and not data["title"]:
+            # Only the first level-1 heading is the title; a later "# " is content
             data["title"] = line[2:].strip()
+            continue
         elif line.startswith("## "):
             if current:
                 current["content"] = current["content"].strip()
                 data["sections"].append(current)
             current = {"heading": line[3:].strip(), "content": ""}
-        elif current is not None:
+            continue
+        if current is not None:
             current["content"] += line + "\n"
         elif line.strip() and not data["summary"]:
             summary_lines.append(line.strip())

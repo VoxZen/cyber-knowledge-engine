@@ -15,6 +15,15 @@ def check_ollama():
         return False
 
 
+def confirm_rename(old_slug, new_slug):
+    """Ask before a merge renames a note. Without a terminal to ask in, the answer is no."""
+    if not sys.stdin.isatty():
+        return False
+    print(f"\nThe merged title gives a new filename:\n  old: {old_slug}.md\n  new: {new_slug}.md")
+    answer = input("Rename the note? The old file will be removed. (yes/no): ").strip().lower()
+    return answer == "yes"
+
+
 def get_input_text(args):
     if args and args[0] == "--file":
         if len(args) < 2:
@@ -261,8 +270,13 @@ def run():
                 target_slug = candidates[choice - 1][0]
                 spinner = Spinner(f"Merging with {label}")
                 spinner.start()
+
+                def ask_rename(old_slug, new_slug):
+                    spinner.stop()  # otherwise the spinner overwrites the question
+                    return confirm_rename(old_slug, new_slug)
+
                 try:
-                    slug = merge_into(text, target_slug, backend=backend)
+                    slug = merge_into(text, target_slug, backend=backend, confirm_rename=ask_rename)
                     spinner.stop()
                     print("-" * 50)
                     print(f"Done. Merged into: {slug}.md")

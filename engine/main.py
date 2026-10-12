@@ -21,7 +21,7 @@ def find_merge_candidates(text):
     return memory.find_top_matches(text, limit=5)
 
 
-def merge_into(text, target_slug, backend=None):
+def merge_into(text, target_slug, backend=None, confirm_rename=None):
     existing_md = vault.read_note(target_slug)
     if not existing_md:
         raise RuntimeError(f"Note '{target_slug}' not found")
@@ -34,14 +34,21 @@ def merge_into(text, target_slug, backend=None):
     merged = brain.merge_two_notes(existing_json, new_note.model_dump(), backend=backend)
 
     new_slug = vault.slugify(merged.title)
+    if not new_slug:
+        raise RuntimeError(f"Merged title '{merged.title}' gives an empty filename. Nothing was changed.")
+    # A new slug means the old file will be removed, so only rename when the user said yes.
+    # Without a confirm_rename callback (server, piped input) the filename stays the same.
+    if new_slug != target_slug and not (confirm_rename and confirm_rename(target_slug, new_slug)):
+        print(f"Title changed to '{merged.title}'; keeping the filename {target_slug}.md")
+        new_slug = target_slug
     category = existing_category or "00 Inbox"
 
-    if target_slug != new_slug:
-        vault.delete_note(target_slug)
-        memory.remove_entry(target_slug)
-
+    # Write the new note and its index entry first; remove the old one only after both succeeded
     vault.write_note(new_slug, category, vault.to_markdown(merged))
     memory.update_entry(new_slug, merged.title, merged.summary, category)
+    if new_slug != target_slug:
+        vault.delete_note(target_slug)
+        memory.remove_entry(target_slug)
 
     print(f"merge: {category}/{new_slug}.md")
     return new_slug
