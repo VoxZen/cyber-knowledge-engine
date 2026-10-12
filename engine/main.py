@@ -40,7 +40,8 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
     print("Step 2/2: merging into existing note...")
     merged = brain.merge_two_notes(existing_json, new_note.model_dump(), backend=backend)
 
-    new_slug = vault.slugify(merged.title)
+    # fallback=False: an unusable title must stop the merge, not rename the note to untitled-...
+    new_slug = vault.slugify(merged.title, fallback=False)
     if not new_slug:
         raise RuntimeError(f"Merged title '{merged.title}' gives an empty filename. Nothing was changed.")
     # A new slug means the old file will be removed, so only rename when the user said yes.

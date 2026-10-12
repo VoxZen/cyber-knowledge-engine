@@ -65,7 +65,8 @@ def delete_note(slug):
         path.unlink()
 
 
-def slugify(title):
+def slugify(title, fallback=True):
+    import hashlib
     import re
     text = title.lower()
     text = re.sub(r"[^a-z0-9\s-]", "", text)
@@ -74,7 +75,12 @@ def slugify(title):
     words = text.split("-")
     if len(words) > 8:
         words = words[:8]
-    return "-".join(words)
+    slug = "-".join(words)
+    if not slug and fallback:
+        # Nothing usable left (e.g. "日本語" or "!!!"). Derive a stable name from the title,
+        # so the same title always maps to the same file and the name can be traced back.
+        slug = "untitled-" + hashlib.sha256(title.encode("utf-8")).hexdigest()[:8]
+    return slug
 
 
 def to_markdown(note):
