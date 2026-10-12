@@ -198,9 +198,15 @@ def handle_delete():
 def handle_reindex():
     from engine.main import find_index_drift, repair_index, list_all_notes
     from engine.memory import load_index
+    from engine.vault import check_layout
     drift = find_index_drift()
     print("-" * 50)
     print(f"Index entries: {len(load_index())}   Notes on disk: {len(list_all_notes())}")
+    missing, nested = check_layout()
+    for path in nested:
+        print(f"  WARNING (fix by hand): category folder nested inside another: {path}")
+    for name in missing:
+        print(f"  WARNING: category folder missing at the top level: {name}")
     for slug, categories in drift["duplicate"]:
         print(f"  DUPLICATE (fix by hand, not changed): {slug} in {', '.join(categories)}")
     for slug in drift["missing_file"]:

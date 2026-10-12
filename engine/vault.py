@@ -10,6 +10,18 @@ def category_dirs():
     return [config.VAULT / name for name in config.VAULT_CATEGORIES if (config.VAULT / name).is_dir()]
 
 
+def check_layout():
+    """Return (missing, nested): classifier categories with no top-level folder, and
+    category folders found inside another category, e.g. "03 Windows/02 Linux"."""
+    missing = [name for name in config.CLASSIFIER_CATEGORIES if not (config.VAULT / name).is_dir()]
+    nested = []
+    for category_dir in category_dirs():
+        for child in sorted(category_dir.iterdir()):
+            if child.is_dir() and child.name in config.VAULT_CATEGORIES:
+                nested.append(f"{category_dir.name}/{child.name}")
+    return missing, nested
+
+
 def find_note(slug):
     matches = []
     for category_dir in category_dirs():
