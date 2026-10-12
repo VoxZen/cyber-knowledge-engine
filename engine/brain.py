@@ -108,21 +108,6 @@ Respond ONLY with JSON in this exact format, nothing else:
 
 The "content" field must be a single string, not a list. Your response must be ONLY the JSON object."""
 
-DECISION_SYSTEM = """You are a cybersecurity knowledge base classifier.
-You are given the TITLE and SUMMARY of an existing note, and NEW raw text.
-Decide if the new text belongs in the SAME note, or is a DIFFERENT topic that needs its own note.
-
-Same note: the new text is about the exact same tool, concept, or technique.
-Different note: the new text is about a related but distinct tool, concept, or technique.
-
-Respond ONLY with JSON, nothing else:
-{"decision": "SAME"} or {"decision": "DIFFERENT"}"""
-
-def decide_same_topic(existing_title, existing_summary, new_text, backend=None):
-    prompt = f"EXISTING NOTE TITLE: {existing_title}\nEXISTING NOTE SUMMARY: {existing_summary}\n\nNEW TEXT:\n{new_text}"
-    result = llm.ask_json(DECISION_SYSTEM, prompt, backend=backend)
-    return result.get("decision", "").upper() == "SAME"
-
 
 def generate_validated(system, prompt, backend=None, schema=Note):
     last_error = None

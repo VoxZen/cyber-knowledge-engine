@@ -1,10 +1,6 @@
 from engine import config
 
 
-def note_path(slug, category):
-    return config.VAULT / category / f"{slug}.md"
-
-
 def category_dirs():
     """Existing top-level category folders, in config order. Other folders hold no notes."""
     return [config.VAULT / name for name in config.VAULT_CATEGORIES if (config.VAULT / name).is_dir()]
@@ -35,11 +31,6 @@ def find_note(slug):
     if not matches:
         return None, None
     return matches[0], matches[0].parent.name
-
-
-def note_exists(slug):
-    path, _ = find_note(slug)
-    return path is not None
 
 
 def read_note(slug):
