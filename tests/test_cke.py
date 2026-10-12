@@ -324,6 +324,7 @@ class P1_1_ReindexTests(VaultTestCase):
             "missing_file": ["ghost"],
             "wrong_category": [("http", "00 Inbox", "04 Web")],
             "not_indexed": [("recon", "09 Methodology")],
+            "duplicate": [],
         })
         self.assertEqual(config.INDEX_FILE.read_bytes(), before)
         llm.embed.assert_not_called()
@@ -335,7 +336,17 @@ class P1_1_ReindexTests(VaultTestCase):
                          {"nmap": "08 Tools", "http": "04 Web", "recon": "09 Methodology"})
         self.assertEqual(index["recon"]["title"], "Recon")
         self.assertEqual(main.find_index_drift(),
-                         {"missing_file": [], "wrong_category": [], "not_indexed": []})
+                         {"missing_file": [], "wrong_category": [], "not_indexed": [], "duplicate": []})
+
+    def test_duplicate_slug_is_reported_not_guessed(self):
+        # find_note refuses duplicates; the reindex scan must still work and report them
+        self.write("01 Networking/nmap.md", "# Nmap\n")
+        drift = main.find_index_drift()
+        self.assertEqual(drift["duplicate"], [("nmap", ["01 Networking", "08 Tools"])])
+        main.repair_index(drift)
+        self.assertIn("01 Networking/nmap.md", self.md_files())
+        self.assertIn("08 Tools/nmap.md", self.md_files())
+        self.assertEqual(self.index()["nmap"]["category"], "08 Tools")
 
     def run_cli(self, answer, ollama_ok=True):
         with mock.patch.object(sys, "argv", ["kb", "--reindex"]), \

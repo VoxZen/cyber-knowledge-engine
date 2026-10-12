@@ -15,6 +15,13 @@ def check_ollama():
         return False
 
 
+def require_ollama():
+    if not check_ollama():
+        print(f"ERROR: Ollama is not reachable at {config.OLLAMA_BASE}, or the embedding model "
+              f"'{config.EMBED_MODEL}' is not pulled. Start Ollama, then run: ollama pull {config.EMBED_MODEL}")
+        sys.exit(1)
+
+
 def confirm_rename(old_slug, new_slug):
     """Ask before a merge renames a note. Without a terminal to ask in, the answer is no."""
     if not sys.stdin.isatty():
@@ -188,11 +195,42 @@ def handle_delete():
         print("Invalid choice. Nothing deleted.")
 
 
+def handle_reindex():
+    from engine.main import find_index_drift, repair_index, list_all_notes
+    from engine.memory import load_index
+    drift = find_index_drift()
+    print("-" * 50)
+    print(f"Index entries: {len(load_index())}   Notes on disk: {len(list_all_notes())}")
+    for slug, categories in drift["duplicate"]:
+        print(f"  DUPLICATE (fix by hand, not changed): {slug} in {', '.join(categories)}")
+    for slug in drift["missing_file"]:
+        print(f"  remove from index (no file on disk): {slug}")
+    for slug, index_category, disk_category in drift["wrong_category"]:
+        print(f"  fix category: {slug}  {index_category} -> {disk_category}")
+    for slug, category in drift["not_indexed"]:
+        print(f"  add to index (embedding needed): {category}/{slug}.md")
+
+    if not (drift["missing_file"] or drift["wrong_category"] or drift["not_indexed"]):
+        print("Index matches the vault. Nothing to repair.")
+        return
+    confirm = input("\nApply these changes to the index? (yes/no): ").strip().lower()
+    if confirm == "yes":
+        repair_index(drift)
+        print("Index repaired.")
+    else:
+        print("Cancelled. Nothing changed.")
+
+
 def run():
     args = sys.argv[1:]
 
     if "--delete" in args:
         handle_delete()
+        return
+
+    if "--reindex" in args:
+        require_ollama()
+        handle_reindex()
         return
 
 

@@ -62,6 +62,41 @@ def list_all_notes():
     return notes
 
 
+def find_index_drift():
+    """Compare the index with the notes on disk. Read-only; the disk is the source of truth.
+
+    Uses its own folder scan (list_all_notes), not find_note: find_note stops on a
+    duplicate slug, and this check must still work so the duplicate can be reported.
+    """
+    index = memory.load_index()
+    on_disk = {}
+    for slug, category in list_all_notes():
+        on_disk.setdefault(slug, []).append(category)
+    drift = {"missing_file": [], "wrong_category": [], "not_indexed": [], "duplicate": []}
+    for slug, categories in on_disk.items():
+        if len(categories) > 1:
+            drift["duplicate"].append((slug, categories))
+        elif slug not in index:
+            drift["not_indexed"].append((slug, categories[0]))
+        elif index[slug].get("category") != categories[0]:
+            drift["wrong_category"].append((slug, index[slug].get("category"), categories[0]))
+    drift["missing_file"] = sorted(slug for slug in index if slug not in on_disk)
+    return drift
+
+
+def repair_index(drift):
+    """Make the index match the disk. Duplicates are left for the user to resolve by hand."""
+    index = memory.load_index()
+    for slug in drift["missing_file"]:
+        del index[slug]
+    for slug, _, disk_category in drift["wrong_category"]:
+        index[slug]["category"] = disk_category
+    memory.save_index(index)
+    for slug, category in drift["not_indexed"]:
+        data = vault.markdown_to_json((config.VAULT / category / f"{slug}.md").read_text(encoding="utf-8"))
+        memory.update_entry(slug, data["title"] or slug, data["summary"], category)
+
+
 def delete_note_by_slug(slug):
     existing = vault.find_note(slug)
     if not existing or not existing[0]:
