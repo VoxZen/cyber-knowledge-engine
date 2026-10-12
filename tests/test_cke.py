@@ -529,21 +529,32 @@ class P1_4_NoUnindexedNoteTests(VaultTestCase):
 # ---------------------------------------------------------------- P1-5
 
 class P1_5_SectionContentTests(unittest.TestCase):
-    """P1-5: section content must be a string or a list of strings, nothing else."""
+    """P1-5: section content is a string or a list of strings/numbers, nothing else."""
 
     def section(self, content):
         return Section.model_validate({"heading": "Usage", "content": content})
 
     def test_rejects_non_text_content(self):
-        for bad in (None, {"a": 1}, 42, 4.2, True, ["ok", 3]):
+        for bad in (None, {"a": 1}, 42, 4.2, True):
             with self.subTest(content=bad):
                 with self.assertRaises(ValidationError) as ctx:
                     self.section(bad)
-                self.assertIn("string or a list of strings", str(ctx.exception))
+                self.assertIn("content must be a string or a list of strings", str(ctx.exception))
+
+    def test_rejects_bad_list_items(self):
+        for bad in ([None], [{"a": 1}], [True], [["nested"]]):
+            with self.subTest(content=bad):
+                with self.assertRaises(ValidationError) as ctx:
+                    self.section(bad)
+                self.assertIn("list items must be strings or numbers", str(ctx.exception))
 
     def test_still_accepts_strings_and_lists(self):
         self.assertEqual(self.section("  some text  ").content, "some text")
         self.assertEqual(self.section(["one", "two"]).content, "- one\n- two")
+
+    def test_numbers_in_a_list_become_bullets(self):
+        # A model may return ports as numbers; retrying for that would only cost API calls
+        self.assertEqual(self.section(["ssh", 22, 443, 1.5]).content, "- ssh\n- 22\n- 443\n- 1.5")
 
     def test_title_and_body_aliases_still_work(self):
         section = Section.model_validate({"title": "Usage", "body": "text"})

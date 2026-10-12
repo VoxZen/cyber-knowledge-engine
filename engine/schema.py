@@ -25,9 +25,17 @@ class Section(BaseModel):
     @field_validator("content", mode="before")
     @classmethod
     def content_to_string(cls, v):
+        # Accept text, or a list of short items that become bullets. Numbers are fine
+        # (a list of ports is meaningful); None, dict, bool and nested lists are not.
+        if isinstance(v, str):
+            return v
         if isinstance(v, list):
+            for item in v:
+                # bool is a subclass of int, so it has to be excluded explicitly
+                if isinstance(item, bool) or not isinstance(item, (str, int, float)):
+                    raise ValueError(f"content list items must be strings or numbers, got {type(item).__name__}")
             return "\n".join(f"- {item}" for item in v)
-        return str(v)
+        raise ValueError(f"content must be a string or a list of strings, got {type(v).__name__}")
 
     @field_validator("content")
     @classmethod
