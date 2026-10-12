@@ -506,6 +506,15 @@ class P1_4_NoUnindexedNoteTests(VaultTestCase):
     def test_process_writeup(self):
         self.assert_fails_and_writes_nothing(main.process_writeup, "text about a box")
 
+    def test_failed_file_write_leaves_no_ghost_index_entry(self):
+        # Order is embedding -> file -> index, so a failed disk write never leaves an index
+        # entry without a file (the drift that P1-1 cleans up)
+        llm.embed.side_effect = fake_embed
+        with mock.patch.object(vault, "write_note", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                main.process("text about nmap")
+        self.assertEqual(self.index(), {})
+
     def test_merge_leaves_the_original_untouched(self):
         original = "# Nmap\n\nScanner.\n\n## Usage\n\nScan.\n"
         self.write("08 Tools/nmap.md", original)

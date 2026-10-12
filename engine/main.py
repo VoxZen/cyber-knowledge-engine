@@ -1,6 +1,14 @@
 from engine import config, memory, vault, brain
 
 
+def save_note(slug, category, note):
+    # 1) embedding (network: Ollama may be down)  2) note file  3) index entry.
+    # If the network step fails nothing is written; the two disk writes happen side by side.
+    entry = memory.embed_entry(note.title, note.summary, category)
+    vault.write_note(slug, category, vault.to_markdown(note))
+    memory.save_entry(slug, entry)
+
+
 def process(text, backend=None):
     print("Creating new note...")
     note = brain.create_note(text, backend=backend)
@@ -10,8 +18,7 @@ def process(text, backend=None):
     print(f"Category: {category}")
 
     slug = vault.slugify(note.title)
-    vault.write_note(slug, category, vault.to_markdown(note))
-    memory.update_entry(slug, note.title, note.summary, category)
+    save_note(slug, category, note)
 
     print(f"create: {category}/{slug}.md")
     return slug
@@ -43,9 +50,8 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
         new_slug = target_slug
     category = existing_category or "00 Inbox"
 
-    # Write the new note and its index entry first; remove the old one only after both succeeded
-    vault.write_note(new_slug, category, vault.to_markdown(merged))
-    memory.update_entry(new_slug, merged.title, merged.summary, category)
+    # Save the merged note and its index entry first; remove the old one only after that succeeded
+    save_note(new_slug, category, merged)
     if new_slug != target_slug:
         vault.delete_note(target_slug)
         memory.remove_entry(target_slug)
@@ -86,15 +92,18 @@ def find_index_drift():
 
 def repair_index(drift):
     """Make the index match the disk. Duplicates are left for the user to resolve by hand."""
+    # Embeddings first (network): if Ollama fails here, the index is not touched at all
+    new_entries = {}
+    for slug, category in drift["not_indexed"]:
+        data = vault.markdown_to_json((config.VAULT / category / f"{slug}.md").read_text(encoding="utf-8"))
+        new_entries[slug] = memory.embed_entry(data["title"] or slug, data["summary"], category)
     index = memory.load_index()
     for slug in drift["missing_file"]:
         del index[slug]
     for slug, _, disk_category in drift["wrong_category"]:
         index[slug]["category"] = disk_category
+    index.update(new_entries)
     memory.save_index(index)
-    for slug, category in drift["not_indexed"]:
-        data = vault.markdown_to_json((config.VAULT / category / f"{slug}.md").read_text(encoding="utf-8"))
-        memory.update_entry(slug, data["title"] or slug, data["summary"], category)
 
 
 def delete_note_by_slug(slug):
@@ -128,8 +137,7 @@ def process_from_plan(text, note_plan, backend=None):
     note.title = note_plan["title"]
     category = brain.choose_category(note.title, note.summary, backend=backend)
     slug = vault.slugify(note.title)
-    vault.write_note(slug, category, vault.to_markdown(note))
-    memory.update_entry(slug, note.title, note.summary, category)
+    save_note(slug, category, note)
     return slug, category
 
 def process_writeup(text, backend=None):
@@ -137,8 +145,7 @@ def process_writeup(text, backend=None):
     note = brain.create_writeup(text, backend=backend)
     category = "90 Writeups"
     slug = vault.slugify(note.title)
-    vault.write_note(slug, category, vault.to_markdown(note))
-    memory.update_entry(slug, note.title, note.summary, category)
+    save_note(slug, category, note)
     print(f"writeup: {category}/{slug}.md")
     return slug
 

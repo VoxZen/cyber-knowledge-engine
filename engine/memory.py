@@ -21,13 +21,18 @@ def similarity(a, b):
     return dot / (norm_a * norm_b)
 
 
-def update_entry(slug, title, summary, category="00 Inbox"):
-    index = load_index()
-    index[slug] = {
+def embed_entry(title, summary, category="00 Inbox"):
+    """Build an index entry. Calls Ollama (network), so this is the step most likely to fail."""
+    return {
         "vector": llm.embed(f"{title}\n{summary}"),
         "title": title,
         "category": category,
     }
+
+
+def save_entry(slug, entry):
+    index = load_index()
+    index[slug] = entry
     save_index(index)
 
 def remove_entry(slug):

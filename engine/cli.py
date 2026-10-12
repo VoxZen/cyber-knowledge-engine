@@ -7,12 +7,21 @@ from engine import main, config
 from engine.main import process, find_merge_candidates, merge_into
 
 
+def with_tag(model):
+    # Ollama treats "nomic-embed-text" and "nomic-embed-text:latest" as the same model
+    return model if ":" in model else model + ":latest"
+
+
 def check_ollama():
+    """True only if Ollama answers 200 and has the embedding model pulled."""
     try:
-        requests.get(config.OLLAMA_BASE + "/api/tags", timeout=5)
-        return True
-    except requests.exceptions.RequestException:
+        r = requests.get(config.OLLAMA_BASE + "/api/tags", timeout=5)
+        if r.status_code != 200:
+            return False
+        pulled = {with_tag(m["name"]) for m in r.json()["models"]}
+    except (requests.exceptions.RequestException, ValueError, KeyError):
         return False
+    return with_tag(config.EMBED_MODEL) in pulled
 
 
 def require_ollama():
@@ -234,19 +243,18 @@ def run():
         handle_delete()
         return
 
+    # Every other mode needs an embedding, and embeddings always come from Ollama,
+    # whichever backend writes the note. Check before any model call or write.
+    require_ollama()
+
     if "--reindex" in args:
-        require_ollama()
         handle_reindex()
         return
-
 
     backend = "api"
     if "--local" in args:
         backend = "local"
         args = [a for a in args if a != "--local"]
-        if not check_ollama():
-            print("ERROR: Cannot reach Ollama. Start the Ollama app first.")
-            sys.exit(1)
 
     if "--split" in args:
        args = [a for a in args if a != "--split"]
