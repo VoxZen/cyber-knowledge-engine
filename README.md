@@ -78,7 +78,13 @@ export CKE_VAULT="$HOME/path/to/your/vault"
 alias kb="$HOME/cke/kb"
 ```
 
-`kb` is a four-line script: it changes to `~/cke`, activates the virtual environment and runs `python3 -m engine.cli` with your arguments. (`kb-local.sh` is an older launcher that opens `nano` for the note text; the alias does not use it.)
+`kb` is a four-line script: it changes to `~/cke`, activates the virtual environment and runs `python3 -m engine.cli` with your arguments.
+
+To write a long note in an editor first, save it to a file and pass the path with `--file`. This works with `--split`, `--writeup` and `--merge` too:
+
+```bash
+kb --split --file ~/Desktop/module.md
+```
 
 ### Optional: HTTP server
 
