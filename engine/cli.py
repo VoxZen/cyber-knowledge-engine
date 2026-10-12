@@ -176,7 +176,11 @@ def handle_delete():
         target_slug = notes[choice - 1][0]
         confirm = input(f"Delete '{target_slug}'? This cannot be undone. (yes/no): ").strip().lower()
         if confirm == "yes":
-            delete_note_by_slug(target_slug)
+            try:
+                delete_note_by_slug(target_slug)
+            except RuntimeError as e:
+                print(f"ERROR: {e}")
+                return
             print(f"Deleted: {target_slug}.md")
         else:
             print("Cancelled. Nothing deleted.")

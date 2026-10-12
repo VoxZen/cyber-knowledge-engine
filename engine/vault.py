@@ -6,12 +6,18 @@ def note_path(slug, category):
 
 
 def find_note(slug):
-    for category_dir in config.VAULT.iterdir():
-        if category_dir.is_dir():
-            candidate = category_dir / f"{slug}.md"
-            if candidate.exists():
-                return candidate, category_dir.name
-    return None, None
+    matches = []
+    for category_dir in sorted(config.VAULT.iterdir()):
+        candidate = category_dir / f"{slug}.md"
+        if category_dir.is_dir() and candidate.exists():
+            matches.append(candidate)
+    if len(matches) > 1:
+        folders = ", ".join(path.parent.name for path in matches)
+        raise RuntimeError(f"Note '{slug}' exists in more than one category ({folders}). "
+                           f"Keep one file and remove the others.")
+    if not matches:
+        return None, None
+    return matches[0], matches[0].parent.name
 
 
 def note_exists(slug):
@@ -27,9 +33,13 @@ def read_note(slug):
 
 
 def write_note(slug, category, markdown):
+    old_path, old_category = find_note(slug)
     category_path = config.VAULT / category
     category_path.mkdir(parents=True, exist_ok=True)
     (category_path / f"{slug}.md").write_text(markdown, encoding="utf-8")
+    # One slug, one file: if the note was in another category, it has now moved here
+    if old_category is not None and old_category != category:
+        old_path.unlink()
 
 
 def delete_note(slug):
