@@ -257,13 +257,11 @@ def run():
         args = [a for a in args if a != "--local"]
 
     if "--split" in args:
-       args = [a for a in args if a != "--split"]
-       split_text = get_input_text(args)
-       handle_split(backend, split_text)
-       return
-    
+        args = [a for a in args if a != "--split"]
+        split_text = get_input_text(args)
+        handle_split(backend, split_text)
+        return
 
-    
     if "--writeup" in args:
         args = [a for a in args if a != "--writeup"]
         from engine.main import process_writeup
@@ -285,8 +283,8 @@ def run():
             spinner.stop()
             print(f"ERROR: {e}")
             sys.exit(1)
-        return      
-   
+        return
+
     do_merge = False
     if "--merge" in args:
         do_merge = True
