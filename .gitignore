@@ -5,3 +5,4 @@ __pycache__/
 server.log
 archive/
 .env
+CKE-TASK.md
