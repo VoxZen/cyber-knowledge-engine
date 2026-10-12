@@ -1,7 +1,23 @@
+import hmac
+import os
 from flask import Flask, request, jsonify
+from engine import config
 from engine.main import process
 
 app = Flask(__name__)
+
+# Read after the engine import: llm.py loads .env when it is imported
+TOKEN = os.environ.get("CKE_SERVER_TOKEN", "")
+LOCAL_ONLY = config.SERVER_HOST in ("127.0.0.1", "localhost", "::1")
+
+
+def authorized():
+    """On localhost no token is needed. Otherwise the request must send the shared token
+    as "Authorization: Bearer <token>". With no token configured, nothing is accepted."""
+    if LOCAL_ONLY:
+        return True
+    sent = request.headers.get("Authorization", "").removeprefix("Bearer ")
+    return bool(TOKEN) and hmac.compare_digest(sent.encode(), TOKEN.encode())
 
 
 @app.route("/health", methods=["GET"])
@@ -11,6 +27,9 @@ def health():
 
 @app.route("/note", methods=["POST"])
 def add_note():
+    if not authorized():
+        return jsonify({"error": "unauthorized"}), 401
+
     data = request.get_json(silent=True) or {}
     text = (data.get("text") or "").strip()
 
@@ -32,7 +51,9 @@ def add_note():
 if __name__ == "__main__":
     print("=" * 50)
     print("Cyber Knowledge Engine server")
-    print("Listening on all interfaces, port 8000")
+    print(f"Listening on {config.SERVER_HOST}, port {config.SERVER_PORT}")
+    if not LOCAL_ONLY and not TOKEN:
+        print("WARNING: CKE_SERVER_TOKEN is not set in .env, so every /note request is refused (401).")
     print("Keep this window open. Press Ctrl+C to stop.")
     print("=" * 50)
-    app.run(host="0.0.0.0", port=8000)
+    app.run(host=config.SERVER_HOST, port=config.SERVER_PORT)

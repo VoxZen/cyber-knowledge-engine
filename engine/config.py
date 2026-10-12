@@ -31,6 +31,12 @@ REQUEST_TIMEOUT = 2400
 # "local" = Ollama (14B, offline), "api" = DeepSeek cloud
 DEFAULT_BACKEND = "api"
 
+# --- Server (engine/server.py) ---
+# "127.0.0.1" = this machine only. "0.0.0.0" accepts requests from the network;
+# then every /note request must carry CKE_SERVER_TOKEN (set in .env).
+SERVER_HOST = "127.0.0.1"
+SERVER_PORT = 8000
+
 # --- DeepSeek API settings ---
 API_BASE_URL = "https://api.deepseek.com"
 API_MODEL = "deepseek-flash"

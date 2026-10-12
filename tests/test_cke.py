@@ -663,5 +663,37 @@ class P2_4_DefaultBackendTests(VaultTestCase):
         self.assertEqual(self.backend_used("api", ["--local"]), "local")
 
 
+# ---------------------------------------------------------------- P2-6
+
+class P2_6_ServerAuthTests(VaultTestCase):
+    """P2-6: localhost by default; when public, /note needs the shared token."""
+
+    TEXT = {"text": "nmap scans ports and services on a target host"}
+
+    def post(self, local_only, token, headers=None):
+        from engine import server
+        with mock.patch.object(server, "LOCAL_ONLY", local_only), \
+             mock.patch.object(server, "TOKEN", token), \
+             mock.patch.object(server, "process", return_value="nmap") as process:
+            response = server.app.test_client().post("/note", json=self.TEXT, headers=headers or {})
+        return response.status_code, process.called
+
+    def test_default_binds_to_localhost(self):
+        self.assertEqual(config.SERVER_HOST, "127.0.0.1")
+
+    def test_localhost_needs_no_token(self):
+        self.assertEqual(self.post(True, ""), (200, True))
+
+    def test_public_server_rejects_missing_or_wrong_token(self):
+        self.assertEqual(self.post(False, "s3cret"), (401, False))
+        self.assertEqual(self.post(False, "s3cret", {"Authorization": "Bearer wrong"}), (401, False))
+
+    def test_public_server_accepts_the_right_token(self):
+        self.assertEqual(self.post(False, "s3cret", {"Authorization": "Bearer s3cret"}), (200, True))
+
+    def test_public_server_without_configured_token_accepts_nothing(self):
+        self.assertEqual(self.post(False, "", {"Authorization": "Bearer "}), (401, False))
+
+
 if __name__ == "__main__":
     unittest.main()
