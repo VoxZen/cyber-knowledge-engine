@@ -605,5 +605,42 @@ class P1_6_SlugifyTests(unittest.TestCase):
         self.assertEqual(vault.slugify("!!!", fallback=False), "")
 
 
+# ---------------------------------------------------------------- P2-1
+
+class P2_1_SplitPlanTests(VaultTestCase):
+    """P2-1: the --split plan goes through schema validation and the retry loop."""
+
+    def propose(self, *responses):
+        with mock.patch.object(llm, "ask_json", side_effect=list(responses)) as ask:
+            return brain.propose_split("source text"), ask
+
+    def test_valid_plan_fills_optional_fields(self):
+        plan, _ = self.propose({"notes": [{"title": "Dig", "type": "tool"}]})
+        self.assertEqual(plan, [{"title": "Dig", "type": "tool", "covers": "", "source_hint": ""}])
+
+    def test_a_retry_can_fix_the_plan(self):
+        plan, ask = self.propose({"notes": [{"covers": "no title"}]}, {"notes": [{"title": "Dig"}]})
+        self.assertEqual([entry["title"] for entry in plan], ["Dig"])
+        self.assertEqual(ask.call_count, 2)
+
+    def test_malformed_plans_are_reported_not_crashed_on(self):
+        attempts = config.MAX_RETRIES + 1
+        for bad in ({"notes": [{"covers": "no title"}]}, {"notes": [{"title": "  "}]},
+                    {"notes": {"title": "Dig"}}, {"notes": ["Dig"]}, {}):
+            with self.subTest(response=bad):
+                with self.assertRaises(RuntimeError):
+                    self.propose(*[bad] * attempts)
+
+    def test_cli_prints_the_error_and_saves_nothing(self):
+        bad = {"notes": [{"covers": "no title"}]}
+        with mock.patch.object(sys, "argv", ["kb", "--split", "nmap scans ports " * 10]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(llm, "ask_json", return_value=bad), \
+             mock.patch("builtins.input", return_value="cancel"):
+            cli.run()
+        self.assertIn("ERROR during planning", self.out.getvalue())
+        self.assertEqual(self.md_files(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

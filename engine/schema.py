@@ -45,6 +45,25 @@ class Section(BaseModel):
         return v.strip()
 
 
+class PlanEntry(BaseModel):
+    """One note proposed by kb --split. Only the title is required."""
+    title: str
+    type: str = ""
+    covers: str = ""
+    source_hint: str = ""
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v):
+        if not v.strip():
+            raise ValueError("title cannot be empty")
+        return v.strip()
+
+
+class SplitPlan(BaseModel):
+    notes: list[PlanEntry]
+
+
 class Note(BaseModel):
     title: str
     summary: str

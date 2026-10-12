@@ -1,7 +1,7 @@
 import json
 from pydantic import ValidationError
 from engine import config, llm
-from engine.schema import Note
+from engine.schema import Note, SplitPlan
 
 TITLE_RULE = """
 TITLE RULE:
@@ -124,7 +124,7 @@ def decide_same_topic(existing_title, existing_summary, new_text, backend=None):
     return result.get("decision", "").upper() == "SAME"
 
 
-def generate_validated(system, prompt, backend=None):
+def generate_validated(system, prompt, backend=None, schema=Note):
     last_error = None
     for attempt in range(config.MAX_RETRIES + 1):
         try:
@@ -132,7 +132,7 @@ def generate_validated(system, prompt, backend=None):
             if last_error:
                 current_prompt = f"{prompt}\n\nYour previous response was rejected: {last_error}\nFix it and respond with valid JSON only."
             raw = llm.ask_json(system, current_prompt, backend=backend)
-            return Note.model_validate(raw)
+            return schema.model_validate(raw)
         except (ValidationError, ValueError, json.JSONDecodeError) as e:
             last_error = str(e)
             print(f"Attempt {attempt + 1} rejected: {last_error[:120]}")
@@ -216,8 +216,9 @@ Propose the splitting only. Do NOT write the note contents. Respond ONLY with th
 
 
 def propose_split(text, backend=None):
-    result = llm.ask_json(SPLIT_SYSTEM, text, backend=backend)
-    return result.get("notes", [])
+    # Same validation and retry path as notes; the CLI reads the entries as dicts
+    plan = generate_validated(SPLIT_SYSTEM, text, backend=backend, schema=SplitPlan)
+    return [entry.model_dump() for entry in plan.notes]
 
 
 
