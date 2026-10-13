@@ -3,8 +3,9 @@ import threading
 import time
 from pathlib import Path
 import requests
-from engine import main, config
+from engine import main, config, vault
 from engine.main import process, find_merge_candidates, merge_into
+from engine.vault import NoteExistsError
 
 
 def with_tag(model):
@@ -38,6 +39,17 @@ def confirm_rename(old_slug, new_slug):
     print(f"\nThe merged title gives a new filename:\n  old: {old_slug}.md\n  new: {new_slug}.md")
     answer = input("Rename the note? The old file will be removed. (yes/no): ").strip().lower()
     return answer == "yes"
+
+
+def report_existing(error):
+    """Plain `kb` stopped because the note is already there. Show it and how to add to it."""
+    title = vault.markdown_to_json(vault.read_note(error.slug))["title"] or error.slug
+    print("-" * 50)
+    print("STOPPED: a note with this filename already exists. Nothing was written.")
+    print(f"  title:    {title}")
+    print(f"  category: {error.category}")
+    print(f"  file:     {error.category}/{error.slug}.md")
+    print("To add this text to that note, run kb --merge with the same text and pick it from the list.")
 
 
 def get_input_text(args):
@@ -112,10 +124,17 @@ def handle_split(backend, text):
         return
 
     while True:
+        # A plan title is its filename. Mark the ones already in the vault, so they can be dropped.
+        on_disk = main.notes_on_disk()
         print("\nProposed atomic notes:")
         for i, note in enumerate(plan, 1):
-            print(f"  {i}. {note['title']}  [{note.get('type', '?')}]")
+            categories = on_disk.get(vault.slugify(note["title"]))
+            exists = f"  [exists: {', '.join(categories)}]" if categories else ""
+            print(f"  {i}. {note['title']}  [{note.get('type', '?')}]{exists}")
             print(f"       {note.get('covers', '')}")
+        if any(vault.slugify(note["title"]) in on_disk for note in plan):
+            print("\n  [exists] = a note with this filename is already in the vault. "
+                  "It will be skipped, not overwritten.")
         print("\nOptions:")
         print("  - Press Enter to CREATE all notes as shown")
         print("  - Type 'merge 2 3' to combine notes 2 and 3 into one")
@@ -155,6 +174,7 @@ def handle_split(backend, text):
     print("-" * 50)
     print(f"Creating {len(plan)} note(s)...")
     created = []
+    skipped = []
     for note in plan:
         spinner = Spinner(f"Writing '{note['title']}'")
         spinner.start()
@@ -163,11 +183,20 @@ def handle_split(backend, text):
             spinner.stop()
             print(f"  created: {category}/{slug}.md")
             created.append(slug)
+        except NoteExistsError as e:
+            # One existing note must not stop a 40-note plan: keep it as it is and go on
+            spinner.stop()
+            print(f"  skipped (already exists): {e.category}/{e.slug}.md")
+            skipped.append(f"{e.category}/{e.slug}.md")
         except Exception as e:
             spinner.stop()
             print(f"  ERROR on '{note['title']}': {e}")
     print("-" * 50)
     print(f"Done. Created {len(created)} note(s).")
+    if skipped:
+        print(f"Skipped {len(skipped)} existing note(s), not overwritten:")
+        for path in skipped:
+            print(f"  {path}")
 
 def handle_delete():
     from engine.main import list_all_notes, delete_note_by_slug
@@ -350,6 +379,10 @@ def run():
         spinner.stop()
         print("-" * 50)
         print(f"Done. Note saved as: {slug}.md")
+    except NoteExistsError as e:
+        spinner.stop()
+        report_existing(e)
+        sys.exit(1)
     except Exception as e:
         spinner.stop()
         print(f"ERROR: {e}")

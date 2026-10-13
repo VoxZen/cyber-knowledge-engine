@@ -1,23 +1,25 @@
 from engine import config, memory, vault, brain
 
 
-def save_note(slug, category, note):
+def save_note(slug, category, note, replace=False):
     # 1) embedding (network: Ollama may be down)  2) note file  3) index entry.
     # If the network step fails nothing is written; the two disk writes happen side by side.
     entry = memory.embed_entry(note.title, note.summary, category)
-    vault.write_note(slug, category, vault.to_markdown(note))
+    vault.write_note(slug, category, vault.to_markdown(note), replace=replace)
     memory.save_entry(slug, entry)
 
 
 def process(text, backend=None):
     print("Creating new note...")
     note = brain.create_note(text, backend=backend)
+    slug = vault.slugify(note.title)
+    # Creating never replaces a note (that is what --merge is for). Stop before the category call.
+    vault.ensure_new(slug)
 
     print("Choosing category...")
     category = brain.choose_category(note.title, note.summary, backend=backend)
     print(f"Category: {category}")
 
-    slug = vault.slugify(note.title)
     save_note(slug, category, note)
 
     print(f"create: {category}/{slug}.md")
@@ -46,13 +48,21 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
         raise RuntimeError(f"Merged title '{merged.title}' gives an empty filename. Nothing was changed.")
     # A new slug means the old file will be removed, so only rename when the user said yes.
     # Without a confirm_rename callback (server, piped input) the filename stays the same.
-    if new_slug != target_slug and not (confirm_rename and confirm_rename(target_slug, new_slug)):
-        print(f"Title changed to '{merged.title}'; keeping the filename {target_slug}.md")
-        new_slug = target_slug
+    # A filename that another note already uses is never offered: that note would be replaced.
+    if new_slug != target_slug:
+        _, taken_by = vault.find_note(new_slug)
+        if taken_by is not None:
+            print(f"Title changed to '{merged.title}', but {taken_by}/{new_slug}.md is another note; "
+                  f"keeping the filename {target_slug}.md")
+            new_slug = target_slug
+        elif not (confirm_rename and confirm_rename(target_slug, new_slug)):
+            print(f"Title changed to '{merged.title}'; keeping the filename {target_slug}.md")
+            new_slug = target_slug
     category = existing_category or "00 Inbox"
 
-    # Save the merged note and its index entry first; remove the old one only after that succeeded
-    save_note(new_slug, category, merged)
+    # Save the merged note and its index entry first; remove the old one only after that succeeded.
+    # Only the note being merged into may be replaced.
+    save_note(new_slug, category, merged, replace=new_slug == target_slug)
     if new_slug != target_slug:
         vault.delete_note(target_slug)
         memory.remove_entry(target_slug)
@@ -69,16 +79,25 @@ def list_all_notes():
     return notes
 
 
-def find_index_drift():
-    """Compare the index with the notes on disk. Read-only; the disk is the source of truth.
+def notes_on_disk():
+    """{slug: [categories]} from a folder scan. More than one category means a duplicate slug.
 
-    Uses its own folder scan (list_all_notes), not find_note: find_note stops on a
-    duplicate slug, and this check must still work so the duplicate can be reported.
+    Unlike find_note this never raises on a duplicate, so callers can still report it.
     """
-    index = memory.load_index()
     on_disk = {}
     for slug, category in list_all_notes():
         on_disk.setdefault(slug, []).append(category)
+    return on_disk
+
+
+def find_index_drift():
+    """Compare the index with the notes on disk. Read-only; the disk is the source of truth.
+
+    Uses its own folder scan (notes_on_disk), not find_note: find_note stops on a
+    duplicate slug, and this check must still work so the duplicate can be reported.
+    """
+    index = memory.load_index()
+    on_disk = notes_on_disk()
     drift = {"missing_file": [], "wrong_category": [], "not_indexed": [], "duplicate": []}
     for slug, categories in on_disk.items():
         if len(categories) > 1:
@@ -124,6 +143,10 @@ def process_from_plan(text, note_plan, backend=None):
     The note_plan entry has: title, type, covers, source_hint.
     We pass the model the full source text plus instructions on which slice to focus on.
     """
+    # The plan title becomes the filename, so an existing note is known before any model call.
+    # NoteExistsError tells the caller to skip this entry; the existing note is not touched.
+    slug = vault.slugify(note_plan["title"])
+    vault.ensure_new(slug)
     focus_prompt = (
         f"{text}\n\n"
         f"---\n"
@@ -137,7 +160,6 @@ def process_from_plan(text, note_plan, backend=None):
     # Use the plan's title (short, atomic, user-approved), not the model's generated title
     note.title = note_plan["title"]
     category = brain.choose_category(note.title, note.summary, backend=backend)
-    slug = vault.slugify(note.title)
     save_note(slug, category, note)
     return slug, category
 

@@ -103,8 +103,8 @@ Material is sent to the engine from the command line. Depending on the type of s
 Given a block of course material (one or more sections), the engine:
 
 1. Asks the model to propose an atomic split — one note per tool, technique, or concept.
-2. Shows the proposed notes to the user, who can approve, merge, or drop any of them.
-3. Writes each confirmed note as a focused reference page and files it under the correct category.
+2. Shows the proposed notes to the user, who can approve, merge, or drop any of them. A title that is already a note in the vault is marked `[exists: <category>]`.
+3. Writes each confirmed note as a focused reference page and files it under the correct category. A note that already exists is skipped, never overwritten, and listed at the end.
 
 A single reconnaissance module, for example, becomes ~40–50 clean atomic notes (`dig.md`, `gobuster.md`, `subdomain-enumeration.md`, …) instead of one giant unreadable file.
 
@@ -120,7 +120,7 @@ Lab writeups follow a different philosophy. Here the engine does not add general
 
 | Command | Purpose |
 |---|---|
-| `kb` | Create a single new note |
+| `kb` | Create a single new note. If a note with the same filename already exists, nothing is written and `kb --merge` is suggested |
 | `kb --merge` | Merge new information into an existing note. Similar notes are found by embedding similarity (cosine ≥ 0.60) and the user selects the target; if the merged title would rename the file, the user is asked first |
 | `kb --delete` | List and delete a note (keeps the search index in sync) |
 | `kb --reindex` | Report where the search index and the files on disk disagree; repair the index only after you type `yes` |
@@ -150,7 +150,7 @@ A few deliberate choices shaped the project:
 - **Two opposite AI philosophies for two kinds of source.** Academy notes use responsible enrichment (the model may add accurate, relevant detail to teach more fully). Writeups use strict fidelity (no additions — only what solved that machine), so writeups stay specific and never blur together.
 - **Backend switching.** The same prompts and validation run against either the cloud API or the local model, so the system keeps working offline and can move to fully local inference in the future.
 - **Validation with retry.** Model output (notes and `--split` plans) is validated against a schema; a malformed response is sent back to the model with the validation error and retried, up to two times, keeping the pipeline robust.
-- **Never lose a note.** A merge writes the merged note before it removes anything, a merge that would rename a file asks first, and the search index is only updated after the note file is written.
+- **Never lose a note.** Creating a note never replaces an existing one (`kb` stops, `--split` skips it). A merge writes the merged note before it removes anything, a merge that would rename a file asks first, and the search index is only updated after the note file is written.
 
 ## Knowledge Base Structure
 

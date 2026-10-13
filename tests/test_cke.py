@@ -288,20 +288,132 @@ class P0_2_DuplicateSlugTests(VaultTestCase):
         self.assertTrue(raised, "an ambiguous delete must be refused, not guessed")
 
     def test_writing_into_a_new_category_moves_the_note(self):
+        # Only a merge may replace a note (P0-3), so the second write passes replace=True
         vault.write_note("nmap", "01 Networking", "# Nmap\n\nold\n")
-        vault.write_note("nmap", "08 Tools", "# Nmap\n\nnew\n")
+        vault.write_note("nmap", "08 Tools", "# Nmap\n\nnew\n", replace=True)
         self.assertEqual(self.md_files(), ["08 Tools/nmap.md"])
         self.assertIn("new", self.read("08 Tools/nmap.md"))
 
     def test_reclassified_topic_leaves_no_orphan(self):
         # A later plain `kb` run may classify the same topic into another category.
+        # Since P0-3 that run is refused, so the first note stays where it was.
+        refused = []
         for category in ("01 Networking", "08 Tools"):
             with mock.patch.object(brain, "create_note", return_value=make_note("Nmap")), \
                  mock.patch.object(brain, "choose_category", return_value=category):
-                main.process("some text about nmap")
-        self.assertEqual(self.md_files(), ["08 Tools/nmap.md"])
-        self.assertEqual(self.index()["nmap"]["category"], "08 Tools")
+                refused.append(self.raises(vault.NoteExistsError, main.process, "some text about nmap"))
+        self.assertEqual(refused, [False, True])
+        self.assertEqual(self.md_files(), ["01 Networking/nmap.md"])
+        self.assertEqual(self.index()["nmap"]["category"], "01 Networking")
         self.assertEqual({p.stem for p in TEST_VAULT.rglob("*.md")}, set(self.index()))
+
+
+# ---------------------------------------------------------------- P0-3
+
+class P0_3_NoOverwriteTests(VaultTestCase):
+    """P0-3: creating a note never replaces an existing one. Plain `kb` stops; --split skips."""
+
+    ORIGINAL = "# DIG\n\nDNS lookup tool.\n\n## Usage\n\nOriginal text.\n"
+    LONG_TEXT = "dig and whois query dns " * 10
+
+    def setUp(self):
+        super().setUp()
+        self.write("08 Tools/dig.md", self.ORIGINAL)
+        self.seed_index({"dig": "08 Tools"})
+        self.index_before = self.index()
+
+    def assert_untouched(self):
+        self.assertEqual(self.read("08 Tools/dig.md"), self.ORIGINAL)
+        self.assertEqual(self.index(), self.index_before)
+
+    def test_write_note_refuses_an_existing_slug_in_any_category(self):
+        for category in ("08 Tools", "01 Networking"):
+            with self.subTest(category=category):
+                with self.assertRaises(vault.NoteExistsError) as ctx:
+                    vault.write_note("dig", category, "# Dig\n\nnew\n")
+                self.assertEqual((ctx.exception.slug, ctx.exception.category), ("dig", "08 Tools"))
+                self.assertEqual(self.md_files(), ["08 Tools/dig.md"])
+                self.assert_untouched()
+
+    def test_process_stops_before_the_category_call(self):
+        with mock.patch.object(brain, "create_note", return_value=make_note("dig")), \
+             mock.patch.object(brain, "choose_category", side_effect=AssertionError("must stop first")):
+            raised = self.raises(vault.NoteExistsError, main.process, "text about dig")
+        self.assert_untouched()
+        llm.embed.assert_not_called()
+        self.assertTrue(raised)
+
+    def test_kb_stops_and_suggests_merge(self):
+        with mock.patch.object(sys, "argv", ["kb", self.LONG_TEXT]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(brain, "create_note", return_value=make_note("dig")):
+            with self.assertRaises(SystemExit) as ctx:
+                cli.run()
+        self.assertEqual(ctx.exception.code, 1)
+        out = self.out.getvalue()
+        self.assertIn("Nothing was written", out)
+        self.assertIn("title:    DIG", out)  # read from the existing file, not the new note
+        self.assertIn("category: 08 Tools", out)
+        self.assertIn("kb --merge", out)
+        self.assert_untouched()
+
+    def run_split(self, plan, answer):
+        new_note = lambda *args, **kwargs: make_note("model title")
+        with mock.patch.object(sys, "argv", ["kb", "--split", self.LONG_TEXT]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(main, "propose_split_plan", return_value=plan), \
+             mock.patch.object(brain, "create_note", side_effect=new_note) as create, \
+             mock.patch.object(brain, "choose_category", return_value="01 Networking"), \
+             mock.patch("builtins.input", return_value=answer):
+            cli.run()
+        return create, self.out.getvalue()
+
+    def test_split_plan_marks_existing_notes(self):
+        plan = [{"title": "dig", "type": "tool"}, {"title": "whois", "type": "tool"}]
+        _, out = self.run_split(plan, "cancel")
+        lines = out.splitlines()
+        self.assertIn("  1. dig  [tool]  [exists: 08 Tools]", lines)
+        self.assertIn("  2. whois  [tool]", lines)
+        self.assertEqual(self.md_files(), ["08 Tools/dig.md"])
+
+    def test_split_skips_existing_notes_and_reports_them(self):
+        plan = [{"title": "dig", "type": "tool"}, {"title": "whois", "type": "tool"}]
+        create, out = self.run_split(plan, "")
+        self.assertEqual(self.md_files(), ["01 Networking/whois.md", "08 Tools/dig.md"])
+        self.assertEqual(self.read("08 Tools/dig.md"), self.ORIGINAL)
+        self.assertEqual(self.index()["dig"], self.index_before["dig"])
+        self.assertEqual(create.call_count, 1, "the skipped note must not cost a model call")
+        self.assertIn("Created 1 note(s)", out)
+        self.assertIn("Skipped 1 existing note(s), not overwritten:\n  08 Tools/dig.md", out)
+
+    def test_split_skips_a_title_repeated_within_the_plan(self):
+        plan = [{"title": "Whois", "type": "tool"}, {"title": "whois", "type": "tool"}]
+        create, out = self.run_split(plan, "")
+        self.assertEqual(self.md_files(), ["01 Networking/whois.md", "08 Tools/dig.md"])
+        self.assertTrue(self.read("01 Networking/whois.md").startswith("# Whois\n"))
+        self.assertEqual(create.call_count, 1)
+        self.assertIn("Skipped 1 existing note(s)", out)
+
+    def test_writeup_does_not_replace_an_existing_writeup(self):
+        original = "# Box One\n\nFirst attempt.\n"
+        self.write("90 Writeups/box-one.md", original)
+        with mock.patch.object(brain, "create_writeup", return_value=make_note("Box One")):
+            raised = self.raises(vault.NoteExistsError, main.process_writeup, "a writeup about box one")
+        self.assertEqual(self.read("90 Writeups/box-one.md"), original)
+        self.assertNotIn("box-one", self.index())
+        self.assertTrue(raised)
+
+    def test_merge_never_renames_onto_another_note(self):
+        other = "# Dig Usage\n\nA different note.\n"
+        self.write("04 Web/dig-usage.md", other)
+        with mock.patch.object(brain, "create_note", return_value=make_note("new")), \
+             mock.patch.object(brain, "merge_two_notes", return_value=make_note("Dig Usage", "merged")):
+            slug = main.merge_into("more about dig", "dig",
+                                   confirm_rename=mock.Mock(side_effect=AssertionError("must not ask")))
+        self.assertEqual(slug, "dig")
+        self.assertEqual(self.read("04 Web/dig-usage.md"), other)
+        self.assertIn("merged", self.read("08 Tools/dig.md"))
+        self.assertEqual(self.md_files(), ["04 Web/dig-usage.md", "08 Tools/dig.md"])
 
 
 # ---------------------------------------------------------------- P1-1

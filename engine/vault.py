@@ -18,6 +18,15 @@ def check_layout():
     return missing, nested
 
 
+class NoteExistsError(RuntimeError):
+    """A write would replace a note that is already in the vault."""
+
+    def __init__(self, slug, category):
+        super().__init__(f"Note '{slug}' already exists in {category}. Nothing was written.")
+        self.slug = slug
+        self.category = category
+
+
 def find_note(slug):
     matches = []
     for category_dir in category_dirs():
@@ -40,8 +49,19 @@ def read_note(slug):
     return path.read_text(encoding="utf-8")
 
 
-def write_note(slug, category, markdown):
+def ensure_new(slug):
+    """Raise NoteExistsError if a note with this slug is already in the vault."""
+    _, category = find_note(slug)
+    if category is not None:
+        raise NoteExistsError(slug, category)
+
+
+def write_note(slug, category, markdown, replace=False):
     old_path, old_category = find_note(slug)
+    # Only a merge, which has read the old note into the new text, may replace it. Any other
+    # write would lose the old text: overwritten in the same folder, removed from another one.
+    if old_path is not None and not replace:
+        raise NoteExistsError(slug, old_category)
     category_path = config.VAULT / category
     category_path.mkdir(parents=True, exist_ok=True)
     (category_path / f"{slug}.md").write_text(markdown, encoding="utf-8")
