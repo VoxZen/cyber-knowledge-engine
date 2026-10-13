@@ -4,7 +4,7 @@
 **Vault:** `~/Documents/CyberKB`
 **Tarix:** 2026-10-12 – 2026-10-13
 **Başlanğıc nöqtəsi:** `4deedd0` (iş ağacı təmiz idi, `main` == `origin/main`)
-**Son vəziyyət:** 20 kod, test və sənəd commit-i, üstəgəl bu sənədin və `Explanation.md`-nin öz commit-ləri. Heç biri push edilməyib.
+**Son vəziyyət:** 21 kod, test və sənəd commit-i (2026-10-13-də əlavə edilən P0-3 daxil), üstəgəl bu sənədin və `Explanation.md`-nin öz commit-ləri. Heç biri push edilməyib.
 
 Bu sənəd hər bənd üçün dörd suala cavab verir: nə dəyişdi, niyə məhz belə dəyişdi, necə yoxlanıldı və hansı commit-dədir. Sətir nömrələri **hazırkı HEAD**-ə görədir. Terminal çıxışları real işlədilmiş əmrlərdən götürülüb. Bəzi əmrlərin sonunda `grep`/`sed` filtri var, ona görə çıxış həmin filtrlənmiş əmrin dəqiq nəticəsidir.
 
@@ -20,6 +20,7 @@ Bu sənəd hər bənd üçün dörd suala cavab verir: nə dəyişdi, niyə məh
 4. `tests/test_cke.py`. Hər test əvvəl **düzgün səbəbdən** uğursuz oldu, sonra düzəlişə keçildi.
 5. P0 → P1 (P1-2, P1-1-dən əvvəl) → P2 → P3.
 6. Vault-u dəyişən hər addımdan əvvəl Nazirin təsdiqi alındı.
+7. 2026-10-13: Nazirin qərarı ilə P0-3 (əvvəl "Hələ açıq" siyahısında 1-ci bənd idi).
 
 ---
 
@@ -40,7 +41,7 @@ NEW parser (HEAD):    title correct 55, corrupted 0
 
 **Dəyişiklik.**
 
-1. `engine/vault.py:87-119` (`markdown_to_json`): fence (kod blokunu açan və bağlayan ```` ``` ```` və ya `~~~` sətri) izlənir. Başlığı yalnız birinci `# ` sətri təyin edir.
+1. `engine/vault.py:107-139` (`markdown_to_json`): fence (kod blokunu açan və bağlayan ```` ``` ```` və ya `~~~` sətri) izlənir. Başlığı yalnız birinci `# ` sətri təyin edir.
 
 ````diff
      for line in lines:
@@ -60,7 +61,7 @@ NEW parser (HEAD):    title correct 55, corrupted 0
          elif line.startswith("## "):
 ````
 
-2. `engine/main.py:31-61` (`merge_into`): əvvəl yazılır, sonra silinir. Boş slug olarsa merge dayanır. Rename yalnız istifadəçinin təsdiqi ilə olur.
+2. `engine/main.py:33-71` (`merge_into`): əvvəl yazılır, sonra silinir. Boş slug olarsa merge dayanır. Rename yalnız istifadəçinin təsdiqi ilə olur.
 
 ```diff
 -def merge_into(text, target_slug, backend=None):
@@ -87,7 +88,7 @@ NEW parser (HEAD):    title correct 55, corrupted 0
 
 `save_note` P1-4-də, `fallback=False` isə P1-6-da əlavə olundu. Yuxarıdakı kod son haldır.
 
-3. `engine/cli.py:34-40` (`confirm_rename`) və `engine/cli.py:328-333` (`ask_rename`): sual CLI-da verilir. Terminal yoxdursa (`stdin` TTY deyil), cavab avtomatik "yox" sayılır. Sual çıxmazdan əvvəl spinner dayandırılır, yoxsa onun üstünə yazardı.
+3. `engine/cli.py:35-41` (`confirm_rename`) və `engine/cli.py:357-362` (`ask_rename`): sual CLI-da verilir. Terminal yoxdursa (`stdin` TTY deyil), cavab avtomatik "yox" sayılır. Sual çıxmazdan əvvəl spinner dayandırılır, yoxsa onun üstünə yazardı.
 
 **Niyə bu yanaşma.**
 
@@ -150,9 +151,9 @@ Düzəlişdən əvvəl bu test `24/55` göstərirdi: 30 qeyddə başlıq korlan�
 
 **Dəyişiklik.**
 
-- `engine/vault.py:21-33` (`find_note`): bütün uyğun faylları toplayır. Birdən çox tapılarsa, kateqoriyaları sadalayan `RuntimeError` qaldırır. Qovluqlar sabit ardıcıllıqla gəzilir: əvvəl `sorted(...)` ilə, P1-2-dən sonra `config` sırası ilə.
-- `engine/vault.py:43-50` (`write_note`): əvvəl yeni fayl yazılır, sonra köhnə kateqoriyadakı fayl silinir.
-- `engine/cli.py:194-199`: dublikat xətası `kb --delete`-də traceback kimi yox, `ERROR: ...` kimi göstərilir.
+- `engine/vault.py:30-42` (`find_note`): bütün uyğun faylları toplayır. Birdən çox tapılarsa, kateqoriyaları sadalayan `RuntimeError` qaldırır. Qovluqlar sabit ardıcıllıqla gəzilir: əvvəl `sorted(...)` ilə, P1-2-dən sonra `config` sırası ilə.
+- `engine/vault.py:59-70` (`write_note`): əvvəl yeni fayl yazılır, sonra köhnə kateqoriyadakı fayl silinir. P0-3-dən sonra bu, yalnız `replace=True` ilə, yəni merge-də baş verir.
+- `engine/cli.py:223-228`: dublikat xətası `kb --delete`-də traceback kimi yox, `ERROR: ...` kimi göstərilir.
 
 ```diff
  def write_note(slug, category, markdown):
@@ -170,7 +171,7 @@ Düzəlişdən əvvəl bu test `24/55` göstərirdi: 30 qeyddə başlıq korlan�
 - **"Rədd et":** eyni slug başqa kateqoriyadadırsa, yazma. Sadədir. Amma adi `kb` hər dəfə `choose_category`-ni yenidən çağırır və model eyni mövzunu sonrakı dəfə başqa qovluğa qoya bilər. Bu halda adi qeyd yaratma sınardı.
 - **"Köçür, sonra yaz"** (seçdim): bir slug həmişə bir faylda qalır. Faylın yeri son təsnifata görə dəyişir. Əvvəlcə yeni fayl yazılır, köhnəsi yalnız ondan sonra silinir. Bu, P0-1-dəki "əvvəl yaz, sonra sil" prinsipi ilə eynidir: proses yarıda qırılsa, iki nüsxə qalar, amma heç biri itməz.
 
-Bu seçimin qiyməti var. Qeyd səssizcə başqa qovluğa keçə bilər, istifadəçi bunu yalnız `create: 08 Tools/nmap.md` sətrindən görür. Bundan başqa, adi `kb` mövcud qeydin məzmununu onsuz da yenisi ilə əvəz edir. Bu köhnə davranışdır və mənim dəyişikliyim deyil, "Hələ açıq" bölməsində 1-ci bənddir.
+Bu seçimin qiyməti var. Qeyd səssizcə başqa qovluğa keçə bilər, istifadəçi bunu yalnız `create: 08 Tools/nmap.md` sətrindən görür. Bundan başqa, adi `kb` mövcud qeydin məzmununu onsuz da yenisi ilə əvəz edirdi. Bu, köhnə davranış idi və P0-3-də düzəldildi: yeni qeyd artıq heç bir kateqoriyada mövcud slug-a yazılmır, ona görə yuxarıdakı "səssiz köçmə" də yalnız merge-ə aiddir.
 
 `find_note`-un dublikat görəndə xəta verməsi bilərəkdəndir: silmə, oxuma və merge səhv nüsxəni təxmin etmək əvəzinə dayanır. P1-1-dəki `kb --reindex` isə `find_note`-dan istifadə etmir, ona görə dublikat olanda da işləyir və onu göstərir.
 
@@ -204,6 +205,164 @@ Real vault-da bu gün dublikat slug yoxdur (`duplicate slugs: 0`).
 
 ---
 
+## P0-3 · Yeni qeyd eyni adlı mövcud qeydin üzərinə yazırdı
+
+Bu bənd audit-də yox idi. Təmir zamanı tapıldı və "Hələ açıq" siyahısında 1-ci bənd idi. 2026-10-13-də Nazir onu P0-3 kimi açdı və iki yol üçün fərqli davranış təyin etdi.
+
+**Vəziyyət:** Düzəldildi.
+
+**Diaqnoz.** `vault.write_note` slug-ın artıq mövcud olub-olmadığına baxmadan yazırdı:
+
+- eyni kateqoriyada `write_text` faylın üzərinə yazırdı və köhnə qeydin bütün məzmunu itirdi;
+- başqa kateqoriyada P0-2-nin "köçür" qaydası işləyirdi: yeni fayl yazılır, köhnəsi silinirdi. Nəticə eyni idi, köhnə məzmun itirdi.
+
+Bu yola dörd giriş çatırdı: adi `kb` (`process`), `kb --split` (`process_from_plan`), `kb --writeup` (`process_writeup`) və server (`process`). Bundan başqa, merge-də rename təsdiqlənəndə yeni ad **başqa** bir qeydə aid ola bilərdi və o qeyd də əvəz olunurdu. Köhnə kodun sintetik vault-dakı nəticəsi (HEAD `0eda6b4`, model mock edilib):
+
+```
+before: 08 Tools/dig.md -> Original summary.
+before: 90 Writeups/box-one.md -> First attempt.
+kb, same category: 08 Tools/dig.md -> New summary.
+kb, other category: 08 Tools/dig.md -> MISSING
+kb, other category: 01 Networking/dig.md -> New summary.
+--writeup: 90 Writeups/box-one.md -> New summary.
+```
+
+**Nazirin qərarı.** İki yol fərqli davranmalıdır:
+
+- **`kb` (tək qeyd):** slug varsa dayansın, mövcud qeydin adını və kateqoriyasını göstərsin, `kb --merge` təklif etsin və heç nə yazmasın.
+- **`kb --split`:** dayanmaq 40-50 qeydlik planı yarıda qoyardı. Ona görə planda mövcud qeydlər işarələnir ki, istifadəçi onları `drop` edə bilsin. Yazma mərhələsində mövcud qeyd keçilir, sonda keçilən qeydlər haqqında hesabat verilir.
+
+**Dəyişiklik.**
+
+- `engine/vault.py:21-27`: yeni `NoteExistsError(RuntimeError)`, `.slug` və `.category` daşıyır.
+- `engine/vault.py:52-56`: `ensure_new(slug)`. Slug hər hansı kateqoriyada varsa, `NoteExistsError` qaldırır.
+- `engine/vault.py:59-70`: `write_note(..., replace=False)`. Slug varsa və `replace=False`-dursa, heç nə yazmadan `NoteExistsError` qaldırır. P0-2-nin "köçür" qaydası yalnız `replace=True` ilə qalır.
+- `engine/main.py:4-9`: `save_note` `replace`-i `write_note`-a ötürür, defolt `False`-dur.
+- `engine/main.py:15-17`: `process` slug-ı `create_note`-dan dərhal sonra hesablayır və `choose_category`-dən **əvvəl** `ensure_new` çağırır.
+- `engine/main.py:148-149`: `process_from_plan` slug-ı plan başlığından hesablayır və **heç bir model çağırışından əvvəl** `ensure_new` çağırır.
+- `engine/main.py:52-57`, `65`: merge-də yeni ad başqa qeydə aiddirsə, rename təklif olunmur və köhnə ad qalır. `save_note(..., replace=new_slug == target_slug)`: yalnız birləşdirilən qeydin özü əvəz oluna bilər.
+- `engine/main.py:82-90`: `notes_on_disk()`. `find_index_drift`-dəki qovluq skanı ayrıca funksiyaya çıxarıldı ki, split planı da ondan istifadə etsin. Dublikatda xəta vermir.
+- `engine/cli.py:44-52`, `382-385`: `report_existing`. Adi `kb` dayananda başlığı (fayldan oxunur), kateqoriyanı və yolu göstərir, `kb --merge` təklif edir və `exit(1)` edir.
+- `engine/cli.py:127-137`: plan göstəriləndə mövcud elementlərin yanında `[exists: <kateqoriya>]` yazılır.
+- `engine/cli.py:186-190`, `194-199`: yazma mərhələsində `NoteExistsError` tutulur, element keçilir, sonda keçilənlərin siyahısı çap olunur.
+- `tests/test_cke.py`: `P0_3_NoOverwriteTests` (8 test). İki P0-2 testi yeniləndi (aşağıda).
+- `README.md`: `--split` addımları, `kb` sətri və "Never lose a note" bəndi yeni davranışı təsvir edir.
+
+```diff
+-def write_note(slug, category, markdown):
++def write_note(slug, category, markdown, replace=False):
+     old_path, old_category = find_note(slug)
++    # Only a merge, which has read the old note into the new text, may replace it. Any other
++    # write would lose the old text: overwritten in the same folder, removed from another one.
++    if old_path is not None and not replace:
++        raise NoteExistsError(slug, old_category)
+```
+
+**Niyə bu yanaşma.**
+
+- **Qoruma `write_note`-dadır, çağıranlarda deyil.** Qeydi diskə yazan yeganə yer odur. Ona görə bir yoxlama dörd girişin hamısını bağlayır, gələcəkdə əlavə olunacaq rejim də defolt olaraq qorunur. Əvəz etmək açıq seçimdir (`replace=True`) və onu yalnız merge verir. Merge köhnə qeydi oxuyub yeni mətnə qatır, ona görə orada əvəz etmək itki deyil.
+- **Erkən yoxlama (`ensure_new`) təhlükəsizlik üçün yox, xərc üçündür.** `process`-də kateqoriya üçün ikinci API çağırışına qənaət edir. `process_from_plan`-da plan başlığı fayl adının özüdür, ona görə keçilən element üçün heç bir model çağırılmır: hər mövcud qeyd üçün 2 API çağırışı az olur. Son qoruma yenə `write_note`-dadır.
+- **`kb` dayanır, `--split` keçir** (Nazirin qərarı). Tək qeyddə dayanmağın qiyməti yoxdur, istifadəçi dərhal `--merge` edə bilər. Split-də isə bir mövcud qeyd 40 qeydlik işi dayandırmamalıdır.
+- **Plan daxilindəki təkrar da tutulur.** Model eyni slug verən iki başlıq qaytarsa (`Whois`, `whois`), birincisi yazılır, ikincisi keçilir. İşarələmədə bu görünmür, çünki o anda heç biri diskdə deyil. Amma yazma mərhələsindəki yoxlama onu tutur, bunun üçün ayrıca test var.
+- **`--writeup` də dayanır, amma `--merge` təklif etmir.** Nazir iki yol saymışdı, amma `--writeup` və server də eyni funksiyadan keçirdi. Qoruma `write_note`-da olduğu üçün onlar da avtomatik qorunur. `--writeup` üçün `--merge` təklif etmədim, çünki merge `CREATE_SYSTEM`/`MERGE_SYSTEM` ilə işləyir və writeup-u ensiklopediya qeydi kimi yenidən yazardı. Writeup-da başlıq yalnız modelin cavabından sonra bəlli olur, ona görə dayanma API çağırışından sonra baş verir. Mesaj belədir: `ERROR: Note 'box-one' already exists in 90 Writeups. Nothing was written.`
+- **Server** eyni mesajı 500 ilə qaytarır. 409 daha dəqiq olardı, amma server legacy-dir və bu dəyişiklik tapşırıqda yox idi.
+- **Merge rename-i başqa qeydin adına düşmür.** Yeni ad başqa qeydə aiddirsə, istifadəçidən soruşmağın mənası yoxdur, çünki "yes" cavabı həmin qeydi silərdi. Ona görə sual verilmir və köhnə ad qalır. Bu, P0-1-dəki "təsdiqsiz rename yoxdur" qaydasının davamıdır.
+- **CLI mesajları ingiliscədir.** Nazirin nümunəsindəki "mövcud" sözünün əvəzinə `[exists: 08 Tools]` yazılır, çünki CLI-ın qalan bütün çıxışı ingiliscədir.
+
+**P0-2 ilə əlaqə.** P0-2-də "rədd et" variantını adi `kb` sınmasın deyə seçməmişdim. P0-3 bu qərarı yeni qeyd yaratmaq üçün dəyişir: yeni qeyd heç bir kateqoriyada mövcud slug-a yazılmır. "Köçür, sonra yaz" yalnız `replace=True` ilə qalır. Merge həmişə mövcud kateqoriyanı saxladığı üçün bu budaq hazırda heç bir yoldan çağırılmır. "Bir slug = bir fayl" zəmanəti üçün saxlanıb. Buna görə iki P0-2 testi yeniləndi, adları isə dəyişmədi:
+
+- `test_writing_into_a_new_category_moves_the_note`: ikinci yazı `replace=True` ilə edilir.
+- `test_reclassified_topic_leaves_no_orphan`: ikinci `kb` rədd olunur, qeyd həm diskdə, həm də index-də `01 Networking`-də qalır.
+
+**Yoxlama.** Yeni testlər əvvəl köhnə kodda, `0eda6b4`-in ayrıca worktree-sində işlədildi. 8 testin hamısı uğursuz oldu (biri subTest ilə iki dəfə):
+
+```
+$ (0eda6b4 worktree) python -m unittest discover -s tests -k P0_3 2>&1 | grep -E '^(FAIL|ERROR):|^Ran|^FAILED' | sed -E 's/ \(test_cke\.[^)]*\)//'
+ERROR: test_process_stops_before_the_category_call
+ERROR: test_write_note_refuses_an_existing_slug_in_any_category (category='08 Tools')
+ERROR: test_write_note_refuses_an_existing_slug_in_any_category (category='01 Networking')
+ERROR: test_writeup_does_not_replace_an_existing_writeup
+FAIL: test_kb_stops_and_suggests_merge
+FAIL: test_merge_never_renames_onto_another_note
+FAIL: test_split_plan_marks_existing_notes
+FAIL: test_split_skips_a_title_repeated_within_the_plan
+FAIL: test_split_skips_existing_notes_and_reports_them
+Ran 8 tests in 1.259s
+FAILED (failures=5, errors=4)
+```
+
+`ERROR`-lar `AttributeError`-dur, çünki köhnə kodda `NoteExistsError` yoxdur. Həmin yollarda itkinin özü yuxarıdakı diaqnoz çıxışında görünür. `FAIL`-lar isə birbaşa itkini göstərir. Məsələn, split-də `08 Tools/dig.md` silinib və yerinə `01 Networking/dig.md` yazılıb.
+
+Yeni kodla:
+
+```
+$ python -m unittest discover -s tests -v -k P0_3 -k P0_2 2>&1 | grep -E ' \.\.\. |^Ran|^OK' | sed -E 's/ \(test_cke\.[^)]*\)//'
+test_delete_refuses_an_ambiguous_slug ... ok
+test_find_note_reports_a_slug_in_two_categories ... ok
+test_reclassified_topic_leaves_no_orphan ... ok
+test_writing_into_a_new_category_moves_the_note ... ok
+test_kb_stops_and_suggests_merge ... ok
+test_merge_never_renames_onto_another_note ... ok
+test_process_stops_before_the_category_call ... ok
+test_split_plan_marks_existing_notes ... ok
+test_split_skips_a_title_repeated_within_the_plan ... ok
+test_split_skips_existing_notes_and_reports_them ... ok
+test_write_note_refuses_an_existing_slug_in_any_category ... ok
+test_writeup_does_not_replace_an_existing_writeup ... ok
+Ran 12 tests in 1.257s
+OK
+```
+
+CLI-ın real çıxışı (sintetik vault, `08 Tools/dig.md` əvvəlcədən var, model mock edilib):
+
+```
+$ kb 'dig and whois query dns ...'
+--------------------------------------------------
+Processing 159 characters with DeepSeek (API)...
+Creating new note...
+--------------------------------------------------
+STOPPED: a note with this filename already exists. Nothing was written.
+  title:    DIG
+  category: 08 Tools
+  file:     08 Tools/dig.md
+To add this text to that note, run kb --merge with the same text and pick it from the list.
+(exit 1)
+
+$ kb --split 'dig and whois query dns ...'   (answer: Enter)
+--------------------------------------------------
+Analyzing 159 characters with DeepSeek (API)...
+
+Proposed atomic notes:
+  1. dig  [tool]  [exists: 08 Tools]
+       DNS lookups
+  2. whois  [tool]
+       Domain registration data
+
+  [exists] = a note with this filename is already in the vault. It will be skipped, not overwritten.
+
+Options:
+  - Press Enter to CREATE all notes as shown
+  - Type 'merge 2 3' to combine notes 2 and 3 into one
+  - Type 'drop 4' to remove note 4
+  - Type 'cancel' to abort
+--------------------------------------------------
+Creating 2 note(s)...
+  skipped (already exists): 08 Tools/dig.md
+  created: 01 Networking/whois.md
+--------------------------------------------------
+Done. Created 1 note(s).
+Skipped 1 existing note(s), not overwritten:
+  08 Tools/dig.md
+```
+
+Sonra vault-da `01 Networking/whois.md` yaradılmışdı, `08 Tools/dig.md`-nin 3-cü sətri isə əvvəlki kimi `Original summary.` idi.
+
+Tam dəst 70 test ilə keçir, real vault round-trip 55/55-dir (aşağıda, "Test xülasəsi").
+
+**Commit:** `3d666a6 fix(P0-3): never overwrite an existing note when creating one`
+
+---
+
 ## P1-1 · Index ilə vault uyğun deyildi
 
 **Vəziyyət:** Düzəldildi (kod və vault).
@@ -212,9 +371,9 @@ Real vault-da bu gün dublikat slug yoxdur (`duplicate slugs: 0`).
 
 **Dəyişiklik.**
 
-- `engine/main.py:72-91` (`find_index_drift`): yalnız oxuyur. Uyğunsuzluğun dörd növünü qaytarır: `missing_file`, `wrong_category`, `not_indexed`, `duplicate`.
-- `engine/main.py:94-107` (`repair_index`): index-i diskə uyğunlaşdırır. Lazım olan bütün embedding-ləri əvvəlcə alır, sonra index-i bir dəfə yazır. Dublikatlara toxunmur.
-- `engine/cli.py:207-236` (`handle_reindex`) və `engine/cli.py:250-252`: `kb --reindex` əmri. Əvvəl Ollama yoxlanır, sonra hesabat çap olunur. Dəyişiklik yalnız `yes` cavabından sonra edilir.
+- `engine/main.py:93-110` (`find_index_drift`): yalnız oxuyur. Uyğunsuzluğun dörd növünü qaytarır: `missing_file`, `wrong_category`, `not_indexed`, `duplicate`.
+- `engine/main.py:113-126` (`repair_index`): index-i diskə uyğunlaşdırır. Lazım olan bütün embedding-ləri əvvəlcə alır, sonra index-i bir dəfə yazır. Dublikatlara toxunmur.
+- `engine/cli.py:236-265` (`handle_reindex`) və `engine/cli.py:279-281`: `kb --reindex` əmri. Əvvəl Ollama yoxlanır, sonra hesabat çap olunur. Dəyişiklik yalnız `yes` cavabından sonra edilir.
 
 **Niyə bu yanaşma.**
 
@@ -287,7 +446,7 @@ Index matches the vault. Nothing to repair.
   - `CLASSIFIER_CATEGORIES` (10): classifier-in seçə biləcəyi qovluqlar;
   - `VAULT_CATEGORIES` (13): bunlar üstəgəl `90 Writeups`, `91 Templates`, `99 Archive`.
 - `engine/vault.py:4-6` (`category_dirs`): qovluq skanı `VAULT_CATEGORIES`-dən törəyir.
-- `engine/vault.py:23`, `engine/main.py:65`: `find_note` və `list_all_notes` `category_dirs()`-dən istifadə edir.
+- `engine/vault.py:32`, `engine/main.py:75`: `find_note` və `list_all_notes` `category_dirs()`-dən istifadə edir.
 - `engine/brain.py:161`: `choose_category` öz `valid` dəstinin əvəzinə `config.CLASSIFIER_CATEGORIES`-ə baxır.
 
 ```diff
@@ -338,7 +497,7 @@ CLAUDE/PLAN listed: []
 **Dəyişiklik.**
 
 - `engine/vault.py:9-18` (`check_layout`): iki siyahı qaytarır. Birincisi yuxarı səviyyədə olmayan classifier kateqoriyalarıdır, ikincisi başqa kateqoriyanın içində olan kateqoriya qovluqlarıdır.
-- `engine/cli.py:214-218`: `kb --reindex` bunları xəbərdarlıq kimi göstərir.
+- `engine/cli.py:243-247`: `kb --reindex` bunları xəbərdarlıq kimi göstərir.
 - Vault-da Nazirin təsdiqindən sonra qovluqlar düzəldildi.
 
 **Niyə bu yanaşma.** Yoxlama yalnız hesabat verir və avtomatik heç nə düzəltmir. Vault-da qovluq köçürmək istifadəçinin qərarıdır. Bu həm də birdəfəlik işdir. Yoxlama maintenance (texniki baxım) əmrinə qoyuldu, hər işə salınmada yox: adi `kb` işini yavaşlatmasın və hər dəfə eyni xəbərdarlıqla mane olmasın.
@@ -376,7 +535,7 @@ Qovluq boş idi, `.DS_Store` da yox idi. Sandbox `rmdir`-i bloklamadı.
 
 **Dəyişiklik.** Qoruma iki qatdan ibarətdir.
 
-1. **CLI-da yoxlama** (`engine/cli.py:10-31`, `engine/cli.py:246-248`):
+1. **CLI-da yoxlama** (`engine/cli.py:11-32`, `engine/cli.py:275-277`):
    - `require_ollama()` `--delete`-dən başqa hər rejimdə, hər iki backend-də (modelin işlədiyi yer) ən əvvəl çağırılır.
    - `check_ollama` HTTP 200 tələb edir və `config.EMBED_MODEL`-in `/api/tags`-də olub-olmadığını yoxlayır. Tag nəzərə alınmadan müqayisə edir: `nomic-embed-text` == `nomic-embed-text:latest`.
 2. **Yazma sırası** (Nazirin düzəlişi). `memory.update_entry` iki funksiyaya bölündü: `embed_entry` (şəbəkə, `engine/memory.py:24-30`) və `save_entry` (disk, `engine/memory.py:33-36`). Bütün yazma yolları `main.save_note`-dan keçir (`engine/main.py:4-9`):
@@ -390,7 +549,7 @@ def save_note(slug, category, note):
     memory.save_entry(slug, entry)
 ```
 
-`process`, `process_from_plan`, `process_writeup` və `merge_into` (`engine/main.py:21, 141, 149, 55`) bu funksiyanı çağırır. `repair_index` də eyni prinsiplə işləyir: əvvəl bütün embedding-lər alınır, index sonra yazılır.
+`process`, `process_from_plan`, `process_writeup` və `merge_into` (`engine/main.py:23, 141, 149, 55`) bu funksiyanı çağırır. `repair_index` də eyni prinsiplə işləyir: əvvəl bütün embedding-lər alınır, index sonra yazılır.
 
 **Niyə bu yanaşma.**
 
@@ -502,8 +661,8 @@ sections.0.content
 
 **Dəyişiklik.**
 
-- `engine/vault.py:59-74`: nəticə boş qalanda `untitled-` + başlığın SHA-256 heşinin ilk 8 simvolu qaytarılır.
-- `engine/main.py:43-44`: `merge_into` `fallback=False` ilə çağırır.
+- `engine/vault.py:79-94`: nəticə boş qalanda `untitled-` + başlığın SHA-256 heşinin ilk 8 simvolu qaytarılır.
+- `engine/main.py:45-46`: `merge_into` `fallback=False` ilə çağırır.
 
 ```diff
 -def slugify(title):
@@ -692,7 +851,7 @@ no references left
 
 **Diaqnoz.** `cli.py`-də `backend = "api"` birbaşa yazılmışdı. `config.py`-də `DEFAULT_BACKEND`-i dəyişmək CLI-a heç bir təsir etmirdi.
 
-**Dəyişiklik.** `engine/cli.py:254`:
+**Dəyişiklik.** `engine/cli.py:283`:
 
 ```diff
 -    backend = "api"
@@ -828,7 +987,7 @@ LOCAL_ONLY = True | host = 127.0.0.1 | token configured = False
 
 **Vəziyyət:** Düzəldildi.
 
-**Dəyişiklik.** `--split` blokunda (`engine/cli.py:260-263`) 3 boşluqluq girinti 4 boşluğa düzəldildi. 4 sətirdə sətir sonundakı boşluqlar silindi. `--split` blokundan sonrakı üç boş sətir bir sətrə endirildi, digər bloklarda olduğu kimi.
+**Dəyişiklik.** `--split` blokunda (`engine/cli.py:289-292`) 3 boşluqluq girinti 4 boşluğa düzəldildi. 4 sətirdə sətir sonundakı boşluqlar silindi. `--split` blokundan sonrakı üç boş sətir bir sətrə endirildi, digər bloklarda olduğu kimi.
 
 **Yoxlama.** Məntiq dəyişməyib:
 
@@ -938,19 +1097,19 @@ Heç bir qeyd yaradılmadı, adı dəyişdirilmədi və ya silinmədi. `dns-reco
 
 ## Test xülasəsi
 
-- **62 test**, hamısı keçir. İzolyasiya olunmuş işlədilmədə 1 test skip olunur (real vault testi).
-- Real vault ilə: **62/62 OK**, round-trip **55/55**.
+- **70 test**, hamısı keçir. İzolyasiya olunmuş işlədilmədə 1 test skip olunur (real vault testi).
+- Real vault ilə: **70/70 OK**, round-trip **55/55**. Bu test vault-u yalnız oxuyur.
 
 ```
 $ cd ~/cke && source venv/bin/activate && python -m unittest discover -s tests
 ----------------------------------------------------------------------
-Ran 62 tests in 0.732s
+Ran 70 tests in 2.006s
 
 OK (skipped=1)
 
 $ CKE_VAULT=~/Documents/CyberKB python -m unittest discover -s tests
 real vault round trip: 55/55 notes keep title, headings and every code line
-Ran 62 tests in 0.733s
+Ran 70 tests in 1.996s
 OK
 ```
 
@@ -960,18 +1119,18 @@ Testlər Python 3.11 və ya daha yeni versiya tələb edir (`TestCase.enterConte
 
 Bunları tapdım, amma düzəltmədim. Ya tapşırıqda yox idi, ya da qərar Nazirindir.
 
-1. **Adi `kb` mövcud qeydin üzərinə yazır.** Bu, ən vacib bənddir və köhnə davranışdır. `process()` slug artıq mövcud olanda qeydin bütün məzmununu yeni mətnlə əvəz edir. Sintetik vault-da yoxlanıldı: "Old content" tamamilə itdi. Audit bunu tapmamışdı. **Tövsiyə:** slug mövcuddursa, `process()` dayansın və "bu mövzu artıq var, `kb --merge` istifadə edin" desin. Kiçik dəyişiklikdir, amma davranışı dəyişdirir. Ona görə Nazirin qərarını gözləyir.
-2. **Index atomik yazılmır.** `memory.save_index` faylı birbaşa `write_text` ilə yazır. Yazma yarıda kəsilsə, `.kb_index.json` korlana bilər. **Tövsiyə:** əvvəl müvəqqəti fayla yazmaq, sonra `os.replace` etmək.
-3. **Server Ollama-nı əvvəlcədən yoxlamır.** Bu, legacy koddur. Ollama sönülü olsa, DeepSeek çağırışları pulla edilir, sonra embedding uğursuz olur. P1-4 sayəsində heç bir fayl yazılmır, amma API xərci itir.
-4. **`--local` chat modelinin (`qwen3:14b`) olub-olmadığını yoxlamır**, yalnız embedding modelini yoxlayır. Model yoxdursa, ilk generate çağırışında HTTP xətası çıxır və heç nə yazılmır.
-5. **Fence qaydası sadələşdirilib.** Bağlayan fence açanla eyni 3 simvolla başlamalıdır. CommonMark-ın "bağlayan fence açandan qısa olmamalı və info string-i olmamalıdır" qaydası tətbiq olunmayıb. 4 backtick-li fence-lər ayrıca idarə olunmur. Real vault-da belə fence yoxdur (0 sətir).
-6. **`CANDIDATE_THRESHOLD = 0.60` ölçülməyib.** Bu rəqəm hiss ilə seçilib, repo-da dəqiqlik benchmark-ı yoxdur.
-7. **Prompt injection** (mətnə gizlədilmiş, modeli yönləndirən zərərli təlimat) **qarşısı alınmayıb.** Etibarsız mətn birbaşa LLM-ə gedir, nəticə diskə yazılır. P2-6 yalnız şəbəkə tərəfini bağlayır.
-8. **`kb --merge` pipe ilə işləmir.** `stdin` pipe olanda "Merge into which note?" sualındakı `input()` `EOFError` verir. Bu, köhnə davranışdır.
-9. **README-dəki "128K context" iddiasını yoxlamadım.** O, DeepSeek modelinin xüsusiyyəti haqqındadır və Nazirin orijinal mətnidir.
-10. **launchd crash döngüsü.** 7448 dəfə `Address already in use` olub. Ehtimal olunan səbəb: server əl ilə işə salınanda launchd agent-i də işləyirdi. Agent yüklü olanda server-i əl ilə işə salmamaq lazımdır.
-11. **Index sinxronlaşdırılan qovluqdadır** (Syncthing). Pipeline iki maşında eyni vaxtda işləsə, index-də konflikt yarana bilər.
-12. **Model id dəyişə bilər** (P1-7). DeepSeek adları bir dəfə dəyişib. `/models`-i vaxtaşırı yoxlamaq faydalıdır.
+1. **Index atomik yazılmır.** `memory.save_index` faylı birbaşa `write_text` ilə yazır. Yazma yarıda kəsilsə, `.kb_index.json` korlana bilər. **Tövsiyə:** əvvəl müvəqqəti fayla yazmaq, sonra `os.replace` etmək.
+2. **Server Ollama-nı əvvəlcədən yoxlamır.** Bu, legacy koddur. Ollama sönülü olsa, DeepSeek çağırışları pulla edilir, sonra embedding uğursuz olur. P1-4 sayəsində heç bir fayl yazılmır, amma API xərci itir.
+3. **`--local` chat modelinin (`qwen3:14b`) olub-olmadığını yoxlamır**, yalnız embedding modelini yoxlayır. Model yoxdursa, ilk generate çağırışında HTTP xətası çıxır və heç nə yazılmır.
+4. **Fence qaydası sadələşdirilib.** Bağlayan fence açanla eyni 3 simvolla başlamalıdır. CommonMark-ın "bağlayan fence açandan qısa olmamalı və info string-i olmamalıdır" qaydası tətbiq olunmayıb. 4 backtick-li fence-lər ayrıca idarə olunmur. Real vault-da belə fence yoxdur (0 sətir).
+5. **`CANDIDATE_THRESHOLD = 0.60` ölçülməyib.** Bu rəqəm hiss ilə seçilib, repo-da dəqiqlik benchmark-ı yoxdur.
+6. **Prompt injection** (mətnə gizlədilmiş, modeli yönləndirən zərərli təlimat) **qarşısı alınmayıb.** Etibarsız mətn birbaşa LLM-ə gedir, nəticə diskə yazılır. P2-6 yalnız şəbəkə tərəfini bağlayır.
+7. **`kb --merge` pipe ilə işləmir.** `stdin` pipe olanda "Merge into which note?" sualındakı `input()` `EOFError` verir. Bu, köhnə davranışdır.
+8. **README-dəki "128K context" iddiasını yoxlamadım.** O, DeepSeek modelinin xüsusiyyəti haqqındadır və Nazirin orijinal mətnidir.
+9. **launchd crash döngüsü.** 7448 dəfə `Address already in use` olub. Ehtimal olunan səbəb: server əl ilə işə salınanda launchd agent-i də işləyirdi. Agent yüklü olanda server-i əl ilə işə salmamaq lazımdır.
+10. **Index sinxronlaşdırılan qovluqdadır** (Syncthing). Pipeline iki maşında eyni vaxtda işləsə, index-də konflikt yarana bilər.
+11. **Model id dəyişə bilər** (P1-7). DeepSeek adları bir dəfə dəyişib. `/models`-i vaxtaşırı yoxlamaq faydalıdır.
+12. **`kb` dayananda `--merge` təklif edir, amma `--merge` hədəfi adla yox, oxşarlıqla tapır** (P0-3). Eyni adlı qeydin oxşarlığı 0.60-dan aşağı olsa, o siyahıda görünməz. Onda `--merge` yeni qeyd yaratmağa keçər və eyni mesajla yenə dayanar. Qeyd itmir, amma ona birləşdirmək üçün CLI-da yol qalmır. **Mümkün həll:** `kb --merge --into <slug>`.
 
 ## Nazir üçün manual addımlar
 
@@ -982,9 +1141,10 @@ Bunları tapdım, amma düzəltmədim. Ya tapşırıqda yox idi, ya da qərar Na
    lsof -nP -iTCP:8000 -sTCP:LISTEN                # 127.0.0.1:8000 görünməlidir, *:8000 yox
    ```
    Log gələcəkdə yenə böyüsə, eyni iki əmri təkrarlayın: əvvəl `mv`, sonra `kickstart -k`.
+
+   **2026-10-13:** server yenidən başladılıb və `127.0.0.1:8000`-də dinləyir. Amma bu, P0-3-dən əvvəl olub, işləyən proses isə kodu başlayanda yükləyir. P0-3 qorumasının server-də də işləməsi üçün `launchctl kickstart -k gui/$(id -u)/com.cke.server` əmrini bir dəfə də işlədin.
 2. **`~/.zshrc`-də 122–123-cü sətirlərdəki köhnə `alias kb=...` sətirlərini özünüz silin.** 124-cü sətir (`alias kb="/Users/nazir/cke/kb"`) qalmalıdır.
 3. **GitHub topics** (P3-3): repo səhifəsində ⚙ → Topics: `llm`, `rag`, `cybersecurity`, `obsidian`, `ollama`, `local-llm`, `knowledge-base`.
 4. **Syncthing konflikt faylları:** `.obsidian/workspace.sync-conflict-20260707-...` və `...-20261006-...`. Toxunulmadı, saxlamaq və ya silmək sizin qərarınızdır.
-5. **"Hələ açıq" 1-ci bənd haqqında qərar:** adi `kb`-nin mövcud qeydin üzərinə yazması.
-6. **Push:** heç nə push edilməyib. Yoxlayıb özünüz edin: `git log --oneline origin/main..main`, sonra `git push`.
-7. **Backup-lar:** hər şeyin düzgün olduğuna əmin olandan sonra `~/Desktop/CyberKB-prefix-20261012-2215.tar.gz` və `~/Desktop/kb_index-prefix.json` fayllarını silə və ya arxivə köçürə bilərsiniz.
+5. **Push:** heç nə push edilməyib. Yoxlayıb özünüz edin: `git log --oneline origin/main..main`, sonra `git push`.
+6. **Backup-lar:** hər şeyin düzgün olduğuna əmin olandan sonra `~/Desktop/CyberKB-prefix-20261012-2215.tar.gz` və `~/Desktop/kb_index-prefix.json` fayllarını silə və ya arxivə köçürə bilərsiniz.

@@ -28,7 +28,7 @@ CKE kibertəhlükəsizlik üzrə xam tədris materialını Obsidian-da atomik qe
 Bu qayda kodda iki yolla tətbiq olunur:
 
 - **İnsan qərarı ilə.** `--split` planı istifadəçiyə göstərilir və istifadəçi qeydləri birləşdirə və ya ata bilər. `--merge`-də isə hədəf qeydi istifadəçi seçir.
-- **Fayl səviyyəsində.** Bir slug (başlıqdan düzəldilən fayl adı) həmişə yalnız bir faylda olur (`engine/vault.py:43-50`, `21-33`). Index də slug ilə açarlanır.
+- **Fayl səviyyəsində.** Bir slug (başlıqdan düzəldilən fayl adı) həmişə yalnız bir faylda olur (`engine/vault.py:59-70`, `30-42`). Yeni qeyd mövcud faylı heç vaxt əvəz etmir, bunu yalnız merge edə bilər (P0-3). Index də slug ilə açarlanır.
 
 Kodda **avtomatik məna yoxlaması yoxdur.** Adi `kb` yeni qeyd yaradarkən oxşar qeydin olub-olmadığını yoxlamır. "Nmap" və "Nmap Scanning" fərqli slug-lar verdiyi üçün iki ayrı qeyd yarana bilər. Oxşarlıq axtarışı yalnız `kb --merge`-də işləyir.
 
@@ -84,113 +84,115 @@ Hər iz eyni qaydada yazılıb:
    - `engine/config.py:5` işləyir: `VAULT` ya `CKE_VAULT` mühit dəyişənindən, ya da defolt yoldan götürülür.
    - `engine/memory.py:2` `llm`-i import edir. `engine/llm.py:10` `.env` faylını yükləyir.
    - Bu sıranın nəticəsi: `config` `.env`-dən **əvvəl** hesablanır, ona görə `CKE_VAULT` `.env`-dən oxunmur.
-3. **`cli.run()`** (`engine/cli.py:239`): `args = sys.argv[1:]`.
-4. `--delete` varsa, dərhal `handle_delete()` çağırılır (`engine/cli.py:242-244`). Ollama yoxlanmır. İz B.5-dədir.
-5. **Ollama yoxlaması** (`engine/cli.py:248`, `require_ollama`):
-   - `check_ollama()` (`engine/cli.py:15-24`) `GET http://localhost:11434/api/tags` göndərir (timeout 5 saniyə).
+3. **`cli.run()`** (`engine/cli.py:268`): `args = sys.argv[1:]`.
+4. `--delete` varsa, dərhal `handle_delete()` çağırılır (`engine/cli.py:271-273`). Ollama yoxlanmır. İz B.5-dədir.
+5. **Ollama yoxlaması** (`engine/cli.py:277`, `require_ollama`):
+   - `check_ollama()` (`engine/cli.py:16-25`) `GET http://localhost:11434/api/tags` göndərir (timeout 5 saniyə).
    - HTTP 200 tələb edir.
    - Model adlarını `with_tag()` ilə normallaşdırır: tag-sız ada `:latest` əlavə olunur.
    - `config.EMBED_MODEL`-in siyahıda olub-olmadığını yoxlayır.
    - **[XƏTA]** Ollama sönülüdürsə və ya model yoxdursa: `ERROR: Ollama is not reachable ...` çap olunur və `sys.exit(1)`. Bu, heç bir LLM çağırışından və heç bir yazmadan əvvəl baş verir.
-6. `--reindex` varsa, `handle_reindex()` çağırılır (`engine/cli.py:250-252`). İz B.7-dədir.
-7. **Backend seçimi** (`engine/cli.py:254-257`): `backend = config.DEFAULT_BACKEND` (`"api"`). `--local` varsa, `backend = "local"` olur və flag siyahıdan silinir.
+6. `--reindex` varsa, `handle_reindex()` çağırılır (`engine/cli.py:279-281`). İz B.7-dədir.
+7. **Backend seçimi** (`engine/cli.py:283-286`): `backend = config.DEFAULT_BACKEND` (`"api"`). `--local` varsa, `backend = "local"` olur və flag siyahıdan silinir.
 
 ### B.1. `kb` (yeni qeyd yaratmaq)
 
-1. `--split` və `--writeup` yoxdur. `do_merge = False` (`engine/cli.py:288`).
-2. **Giriş mətni** (`engine/cli.py:293`, `get_input_text`, `engine/cli.py:43-58`):
+1. `--split` və `--writeup` yoxdur. `do_merge = False` (`engine/cli.py:317`).
+2. **Giriş mətni** (`engine/cli.py:322`, `get_input_text`, `engine/cli.py:55-70`):
    - `args[0] == "--file"` olarsa, fayl oxunur;
    - başqa arqumentlər varsa, onlar boşluqla birləşdirilir;
    - heç nə yoxdursa, "Paste your note text below" çap olunur və `sys.stdin.read()` Ctrl+D-yə qədər oxuyur.
    - **Forma:** xam `str`, sonra `.strip()`.
-   - **[XƏTA]** Mətn 30 simvoldan qısadırsa: `Input too short` çap olunur və `sys.exit(1)` (`engine/cli.py:294-296`).
-3. Spinner başlayır, sonra `process(text, backend)` çağırılır (`engine/cli.py:346-349`).
-4. **`main.process`** (`engine/main.py:12-24`):
+   - **[XƏTA]** Mətn 30 simvoldan qısadırsa: `Input too short` çap olunur və `sys.exit(1)` (`engine/cli.py:323-325`).
+3. Spinner başlayır, sonra `process(text, backend)` çağırılır (`engine/cli.py:375-378`).
+4. **`main.process`** (`engine/main.py:12-26`):
    1. `brain.create_note(text)` (`engine/main.py:14`) → `generate_validated(CREATE_SYSTEM, text)` (`engine/brain.py:127-128`, `112-124`):
       - **[LLM]** `llm.ask_json` (`engine/brain.py:119`) → `_ask_json_api` (`engine/llm.py:56-70`). DeepSeek-ə system və user mesajı gedir: `temperature=0.2`, `top_p=0.95`, `max_tokens=32768`.
       - **Forma:** cavab xam mətndir. `_extract_json` (`engine/llm.py:73-78`) birinci `{` ilə sonuncu `}` arasını kəsib `json.loads` edir və nəticə `dict` olur. Sonra `Note.model_validate(raw)` (`engine/brain.py:120`) onu `Note` obyektinə çevirir.
       - **[XƏTA]** `ValidationError`, `ValueError` və ya `JSONDecodeError` olarsa: səhv mesajı prompt-a əlavə olunur və yenidən soruşulur. Ümumilikdə `MAX_RETRIES + 1 = 3` cəhd edilir. Üçü də uğursuz olsa, `RuntimeError` qaldırılır (`engine/brain.py:124`).
       - **[XƏTA]** `DEEPSEEK_API_KEY` yoxdursa, `RuntimeError` qaldırılır (`engine/llm.py:20`). Şəbəkə və ya auth xətaları (`openai`-nin exception-ları) da retry olunmur, çünki `generate_validated` yalnız yuxarıdakı üç növü tutur. Hər iki halda `cli` `ERROR: ...` çap edir və `exit(1)` edir.
-   2. `brain.choose_category(title, summary)` (`engine/main.py:17`, `engine/brain.py:156-165`):
+   2. `slug = vault.slugify(note.title)` (`engine/main.py:15`, `engine/vault.py:79-94`). Nəticə həmişə boş olmayan `str`-dir. Sonra `vault.ensure_new(slug)` (`engine/main.py:17`, `engine/vault.py:52-56`) bu slug-ın hər hansı kateqoriyada olub-olmadığını yoxlayır.
+      - **[XƏTA]** Slug artıq varsa, `NoteExistsError` qalxır, kateqoriya çağırışı edilmir və **heç nə yazılmır**. `cli` `STOPPED: a note with this filename already exists. Nothing was written.` çap edir. Sonra mövcud qeydin başlığını (fayldan oxunur), kateqoriyasını və yolunu göstərir, `kb --merge` təklif edir və `exit(1)` edir (`engine/cli.py:382-385`, `report_existing`: `44-52`).
+   3. `brain.choose_category(title, summary)` (`engine/main.py:20`, `engine/brain.py:156-165`):
       - **[LLM]** `CATEGORY_SYSTEM` ilə ikinci çağırış.
       - Cavab `config.CLASSIFIER_CATEGORIES`-də deyilsə, və ya hər hansı xəta olsa, `"00 Inbox"` qaytarılır. Bu funksiya **heç vaxt** exception qaldırmır.
-   3. `slug = vault.slugify(note.title)` (`engine/main.py:20`, `engine/vault.py:59-74`). Nəticə həmişə boş olmayan `str`-dir.
-   4. `save_note(slug, category, note)` (`engine/main.py:21`, `4-9`). Üç addım bu sıra ilə gedir:
+   4. `save_note(slug, category, note)` (`engine/main.py:23`, `4-9`). Üç addım bu sıra ilə gedir:
       1. **[EMB]** `memory.embed_entry` (`engine/memory.py:24-30`) → `llm.embed` (`engine/llm.py:25-33`): `POST /api/embeddings`, mətn `"{title}\n{summary}"`-dir, ilk 6000 simvola qədər kəsilir, timeout 60 saniyədir. **Forma:** `{"vector": [768 float], "title": ..., "category": ...}`. **[XƏTA]** Ollama düşübsə, `requests` exception-u qalxır və **heç nə yazılmır**.
-      2. **[VAULT]** `vault.write_note` (`engine/vault.py:43-50`):
+      2. **[VAULT]** `vault.write_note` (`engine/vault.py:59-70`):
          - `find_note(slug)` köhnə yeri tapır. Slug iki kateqoriyada varsa, `RuntimeError` qaldırır.
+         - Slug artıq varsa və `replace=False`-dursa, `NoteExistsError` qalxır. Merge-dən başqa bütün yollarda `replace=False`-dur. `process` bunu 2-ci addımda yoxlayıb, bu isə son qorumadır.
          - Lazım olsa, qovluq yaradılır.
-         - `<VAULT>/<category>/<slug>.md` faylına `to_markdown(note)` yazılır (`engine/vault.py:77-84`).
-         - Slug başqa kateqoriyada idisə, köhnə fayl silinir.
-         - Slug **eyni** kateqoriyada idisə, fayl üzərinə yazılır və köhnə məzmun itir. Bu, I bölməsində məhdudiyyət kimi qeyd olunub.
+         - `<VAULT>/<category>/<slug>.md` faylına `to_markdown(note)` yazılır (`engine/vault.py:97-104`).
+         - `replace=True` ilə (yalnız merge) slug başqa kateqoriyada idisə, köhnə fayl silinir.
       3. **[VAULT]** `memory.save_entry` (`engine/memory.py:33-36`): bütün index oxunur, `index[slug] = entry` yazılır, bütün index yenidən yazılır.
 5. `create: <category>/<slug>.md` çap olunur. `cli` sonra `Done. Note saved as: <slug>.md` çap edir.
 
-**Xülasə:** 2 LLM çağırışı (retry ilə ən çox 4), 1 embedding, 2 disk yazısı.
+**Xülasə:** 2 LLM çağırışı (retry ilə ən çox 4), 1 embedding, 2 disk yazısı. Slug artıq varsa, 1 LLM çağırışından sonra dayanır və heç nə yazmır.
 
 ### B.2. `kb --split` (modulu atomik qeydlərə bölmək)
 
-1. `--split` siyahıdan silinir. `split_text = get_input_text(args)` oxunur, sonra `handle_split(backend, split_text)` çağırılır (`engine/cli.py:259-263`).
-2. **`handle_split`** (`engine/cli.py:88-170`): mətn `.strip()` edilir. **[XƏTA]** 100 simvoldan qısadırsa: `Input too short ... for splitting` çap olunur və funksiya qayıdır. Burada `exit(1)` olmur.
-3. **Plan** (`engine/cli.py:103`): `propose_split_plan` (`engine/main.py:118-119`) → `brain.propose_split` (`engine/brain.py:203-206`):
+1. `--split` siyahıdan silinir. `split_text = get_input_text(args)` oxunur, sonra `handle_split(backend, split_text)` çağırılır (`engine/cli.py:288-292`).
+2. **`handle_split`** (`engine/cli.py:100-199`): mətn `.strip()` edilir. **[XƏTA]** 100 simvoldan qısadırsa: `Input too short ... for splitting` çap olunur və funksiya qayıdır. Burada `exit(1)` olmur.
+3. **Plan** (`engine/cli.py:115`): `propose_split_plan` (`engine/main.py:137-138`) → `brain.propose_split` (`engine/brain.py:203-206`):
    - **[LLM]** `generate_validated(SPLIT_SYSTEM, text, schema=SplitPlan)`. Retry yolu notlarla eynidir.
    - **Forma:** `dict` → `SplitPlan` obyekti → `[entry.model_dump() ...]`, yəni `{"title", "type", "covers", "source_hint"}` dict-lərindən ibarət siyahı.
    - **[XƏTA]** Plan son cəhddən sonra da yararsızdırsa: `ERROR during planning: ...` çap olunur və funksiya qayıdır. Heç nə yazılmır.
-4. Plan boşdursa, `No notes proposed. Nothing saved.` çap olunur (`engine/cli.py:110-112`).
-5. **İnsanın təsdiqi** (`engine/cli.py:114-153`). Plan nömrələnmiş şəkildə göstərilir. Seçimlər:
+4. Plan boşdursa, `No notes proposed. Nothing saved.` çap olunur (`engine/cli.py:122-124`).
+5. **İnsanın təsdiqi** (`engine/cli.py:126-172`). Plan nömrələnmiş şəkildə göstərilir. Hər dəfə plan göstəriləndə `main.notes_on_disk()` (`engine/main.py:82-90`) vault-u bir dəfə skan edir. Elementin başlığından alınan slug artıq diskdədirsə, sətrin sonuna `[exists: <kateqoriya>]` əlavə olunur, siyahının altında isə belə elementin keçiləcəyi izah edilir (`engine/cli.py:127-137`). Onu `drop` ilə atmaq olar. Seçimlər:
    - Enter: hamısını yarat;
    - `cancel`: dayandır;
    - `merge 2 3`: seçilənlər birləşir. Başlıq birinci seçilənin başlığı olur, `type` həmişə `"technique"` olur, `covers` və `source_hint` birləşdirilir. Yeni element siyahının əvvəlinə qoyulur;
    - `drop 4`: elementi at.
-6. **Hər plan elementi üçün** (`engine/cli.py:158-168`): `process_from_plan(text, entry, backend)` çağırılır (`engine/main.py:121-142`):
-   1. `focus_prompt` qurulur. Bu, **bütün** mənbə mətni və əlavə göstərişlərdir: "yalnız bu başlığa fokuslan", `covers`, `source_hint`.
-   2. **[LLM]** `brain.create_note(focus_prompt)`.
-   3. `note.title = note_plan["title"]` (`engine/main.py:138`). Başlıq olaraq modelin yaratdığı yox, istifadəçinin təsdiqlədiyi qısa başlıq götürülür. Pydantic təyin etməni (assignment) yenidən yoxlamır, amma bu başlıq artıq `PlanEntry`-də yoxlanıb.
-   4. **[LLM]** `choose_category`, sonra `slugify`, sonra **[EMB]** + **[VAULT]** `save_note`.
-   5. **[XƏTA]** Bir qeyddə xəta olarsa, `ERROR on '<title>'` çap olunur və **növbəti qeydə keçilir**. Artıq yaradılmış qeydlər qalır.
-7. Sonda `Done. Created N note(s).` çap olunur.
+6. **Hər plan elementi üçün** (`engine/cli.py:178-193`): `process_from_plan(text, entry, backend)` çağırılır (`engine/main.py:140-164`):
+   1. `slug = slugify(note_plan["title"])` və `ensure_new(slug)` (`engine/main.py:148-149`). Bu yoxlama **heç bir model çağırışından əvvəl** olur. **[XƏTA]** Slug artıq varsa, `NoteExistsError` qalxır. `handle_split` onu tutur, `skipped (already exists): <kateqoriya>/<slug>.md` çap edir və növbəti elementə keçir (`engine/cli.py:186-190`). Mövcud qeydə toxunulmur və model çağırılmır. Eyni plandakı iki başlıq eyni slug verirsə (`Whois` və `whois`), birincisi yazılır, ikincisi keçilir.
+   2. `focus_prompt` qurulur (`engine/main.py:150-158`). Bu, **bütün** mənbə mətni və əlavə göstərişlərdir: "yalnız bu başlığa fokuslan", `covers`, `source_hint`.
+   3. **[LLM]** `brain.create_note(focus_prompt)`.
+   4. `note.title = note_plan["title"]` (`engine/main.py:161`). Başlıq olaraq modelin yaratdığı yox, istifadəçinin təsdiqlədiyi qısa başlıq götürülür. Pydantic təyin etməni (assignment) yenidən yoxlamır, amma bu başlıq artıq `PlanEntry`-də yoxlanıb.
+   5. **[LLM]** `choose_category`, sonra **[EMB]** + **[VAULT]** `save_note`. Slug 1-ci addımda hesablanıb.
+   6. **[XƏTA]** Bir qeyddə başqa xəta olarsa, `ERROR on '<title>'` çap olunur və **növbəti qeydə keçilir**. Artıq yaradılmış qeydlər qalır.
+7. Sonda `Done. Created N note(s).` çap olunur. Keçilən element varsa, `Skipped M existing note(s), not overwritten:` və hər birinin yolu çap olunur (`engine/cli.py:194-199`).
 
-**Xülasə:** N qeyd üçün `1 + 2N` LLM çağırışı (retry-lər bura daxil deyil). Mənbə mətnin hamısı hər qeyd üçün yenidən göndərilir, ona görə xərc təxminən `N × mətnin uzunluğu` qədərdir.
+**Xülasə:** N qeyd üçün `1 + 2N` LLM çağırışı (retry-lər bura daxil deyil). Keçilən qeyd model çağırmır. Mənbə mətnin hamısı hər qeyd üçün yenidən göndərilir, ona görə xərc təxminən `N × mətnin uzunluğu` qədərdir.
 
 ### B.3. `kb --writeup` (maşın həllini writeup-a çevirmək)
 
-1. `--writeup` siyahıdan silinir, mətn oxunur və `.strip()` edilir (`engine/cli.py:265-268`). **[XƏTA]** 100 simvoldan qısadırsa, funksiya qayıdır (`engine/cli.py:269-271`).
-2. Spinner başlayır, sonra `process_writeup(text, backend)` çağırılır (`engine/main.py:144-151`):
+1. `--writeup` siyahıdan silinir, mətn oxunur və `.strip()` edilir (`engine/cli.py:294-297`). **[XƏTA]** 100 simvoldan qısadırsa, funksiya qayıdır (`engine/cli.py:298-300`).
+2. Spinner başlayır, sonra `process_writeup(text, backend)` çağırılır (`engine/main.py:166-173`):
    1. **[LLM]** `brain.create_writeup` (`engine/brain.py:247-248`) → `generate_validated(WRITEUP_SYSTEM, text)` → `Note`.
    2. `category = "90 Writeups"`. Bu, sabit dəyərdir, classifier çağırılmır.
-   3. `slugify`, sonra **[EMB]** + **[VAULT]** `save_note`.
-3. **[XƏTA]** İstənilən exception-da `ERROR: ...` çap olunur və `exit(1)` (`engine/cli.py:282-285`).
+   3. `slugify`, sonra **[EMB]** + **[VAULT]** `save_note`. Bu adda writeup artıq varsa, `write_note` `NoteExistsError` qaldırır və heç nə yazılmır (P0-3). Başlıq yalnız modelin cavabından sonra bəlli olur, ona görə API çağırışı artıq edilmiş olur. `--merge` təklif olunmur, çünki merge writeup-u ensiklopediya prompt-u ilə yenidən yazardı.
+3. **[XƏTA]** İstənilən exception-da `ERROR: ...` çap olunur və `exit(1)` (`engine/cli.py:311-314`).
 
 **Xülasə:** 1 LLM çağırışı (retry ilə ən çox 3), 1 embedding, 2 disk yazısı.
 
 ### B.4. `kb --merge` (yeni məlumatı mövcud qeydə birləşdirmək)
 
-1. `do_merge = True` olur, flag siyahıdan silinir (`engine/cli.py:288-291`). Mətn B.1-dəki kimi oxunur. **[XƏTA]** 30 simvoldan qısadırsa, `exit(1)`.
-2. **Oxşar qeydlərin axtarışı** (`engine/cli.py:302-306`): `find_merge_candidates(text)` (`engine/main.py:27-28`) → `memory.find_top_matches(text, limit=5)` (`engine/memory.py:45-56`):
+1. `do_merge = True` olur, flag siyahıdan silinir (`engine/cli.py:317-320`). Mətn B.1-dəki kimi oxunur. **[XƏTA]** 30 simvoldan qısadırsa, `exit(1)`.
+2. **Oxşar qeydlərin axtarışı** (`engine/cli.py:331-335`): `find_merge_candidates(text)` (`engine/main.py:29-30`) → `memory.find_top_matches(text, limit=5)` (`engine/memory.py:45-56`):
    1. `load_index()`. Index boşdursa, `[]` qaytarılır.
    2. **[EMB]** `llm.embed(text)`: yeni mətnin vektoru (ilk 6000 simvol).
    3. Index-dəki **hər** yazı ilə cosine similarity (iki vektorun istiqamət oxşarlığı) hesablanır (`engine/memory.py:15-21`).
    4. Nəticələr azalan sıra ilə düzülür, `>= CANDIDATE_THRESHOLD` (0.60) olanlar saxlanır, ən çox 5-i götürülür.
    - **Forma:** `[(slug, title, category, score), ...]`.
 3. Namizəd yoxdursa: `No sufficiently similar notes found. Creating a new note instead.` çap olunur, `do_merge = False` olur və axın **B.1-ə** keçir (adi qeyd yaradılır).
-4. Namizədlər göstərilir və `input()` ilə seçim alınır (`engine/cli.py:312-316`):
+4. Namizədlər göstərilir və `input()` ilə seçim alınır (`engine/cli.py:341-345`):
    - `0` və ya rəqəm olmayan cavab: yeni qeyd yaradılır (B.1);
    - aralıqdan kənar rəqəm: `Invalid choice` və `exit(1)`;
    - düzgün seçim: `target_slug` götürülür.
-5. Spinner başlayır və `ask_rename` funksiyası qurulur (`engine/cli.py:328-330`). Bu funksiya əvvəl spinner-i dayandırır, sonra `confirm_rename`-i çağırır.
-6. **`merge_into(text, target_slug, backend, confirm_rename=ask_rename)`** (`engine/main.py:31-61`):
-   1. `vault.read_note(target_slug)` (`engine/vault.py:36-40`). **[XƏTA]** Fayl yoxdursa, `RuntimeError: Note '...' not found`. Bu, index-də ghost yazı olanda baş verir və `kb --reindex` bunu təmizləyir. Slug dublikatdırsa, `find_note` `RuntimeError` qaldırır.
-   2. `vault.markdown_to_json(existing_md)` (`engine/vault.py:87-119`). **Forma:** `{"title", "summary", "sections": [{"heading", "content"}]}`. Fence-lərin içi məzmundur, başlığı yalnız birinci `# ` sətri təyin edir.
+5. Spinner başlayır və `ask_rename` funksiyası qurulur (`engine/cli.py:357-359`). Bu funksiya əvvəl spinner-i dayandırır, sonra `confirm_rename`-i çağırır.
+6. **`merge_into(text, target_slug, backend, confirm_rename=ask_rename)`** (`engine/main.py:33-71`):
+   1. `vault.read_note(target_slug)` (`engine/vault.py:45-49`). **[XƏTA]** Fayl yoxdursa, `RuntimeError: Note '...' not found`. Bu, index-də ghost yazı olanda baş verir və `kb --reindex` bunu təmizləyir. Slug dublikatdırsa, `find_note` `RuntimeError` qaldırır.
+   2. `vault.markdown_to_json(existing_md)` (`engine/vault.py:107-139`). **Forma:** `{"title", "summary", "sections": [{"heading", "content"}]}`. Fence-lərin içi məzmundur, başlığı yalnız birinci `# ` sətri təyin edir.
    3. `find_note` yenidən çağırılır və mövcud kateqoriya götürülür.
    4. **[LLM]** `brain.create_note(text)`: yeni mətn strukturlaşdırılır.
    5. **[LLM]** `brain.merge_two_notes(existing_json, new_note.model_dump())` (`engine/brain.py:131-133`). Prompt hər iki qeydin JSON-udur, nəticə `Note`-dur.
-   6. `new_slug = slugify(merged.title, fallback=False)` (`engine/main.py:44`). **[XƏTA]** Slug boşdursa: `RuntimeError(... Nothing was changed.)`. Vault-a toxunulmayıb.
-   7. Slug dəyişibsə, `confirm_rename(target, new)` çağırılır (`engine/cli.py:34-40`):
+   6. `new_slug = slugify(merged.title, fallback=False)` (`engine/main.py:46`). **[XƏTA]** Slug boşdursa: `RuntimeError(... Nothing was changed.)`. Vault-a toxunulmayıb.
+   7. Slug dəyişibsə, əvvəl yeni slug-ın başqa qeydə aid olub-olmadığı yoxlanır (`engine/main.py:52-57`). Aiddirsə, sual verilmir, fayl adı köhnə qalır və `Title changed to '...', but <kateqoriya>/<slug>.md is another note; keeping the filename ...` çap olunur. Aid deyilsə, `confirm_rename(target, new)` çağırılır (`engine/cli.py:35-41`):
       - `stdin` TTY deyilsə, cavab `False` olur;
       - əks halda köhnə və yeni ad göstərilir və `yes/no` soruşulur.
       - `yes` deyilsə, fayl adı köhnə qalır və `Title changed to ...; keeping the filename ...` çap olunur.
    8. `category = existing_category or "00 Inbox"`. Merge-də classifier **çağırılmır**, qeyd öz qovluğunda qalır.
-   9. **[EMB]** + **[VAULT]** `save_note(new_slug, category, merged)`: əvvəl embedding, sonra fayl, sonra index.
+   9. **[EMB]** + **[VAULT]** `save_note(new_slug, category, merged, replace=new_slug == target_slug)` (`engine/main.py:65`): əvvəl embedding, sonra fayl, sonra index. `replace=True` yalnız birləşdirilən qeydin öz slug-ı üçündür, yəni merge başqa qeydi əvəz edə bilməz.
    10. Rename təsdiqlənibsə, **[VAULT]** `vault.delete_note(target_slug)` və `memory.remove_entry(target_slug)` çağırılır. Bu silmə yalnız yeni fayl və onun index yazısı uğurla yazıldıqdan sonra baş verir.
 7. `Done. Merged into: <slug>.md` çap olunur. **[XƏTA]** İstənilən exception-da `ERROR: ...` və `exit(1)`.
 
@@ -198,12 +200,12 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.5. `kb --delete` (qeydi silmək)
 
-1. `--delete` **ilk** yoxlanılan flag-dır (`engine/cli.py:242-244`). Ona görə Ollama yoxlanmır və başqa flag-lar nəzərə alınmır.
-2. **`handle_delete`** (`engine/cli.py:172-204`):
-   1. `list_all_notes()` (`engine/main.py:63-69`). Yalnız `config.VAULT_CATEGORIES`-də olan mövcud qovluqlar gəzilir (`vault.category_dirs()`), qovluqlar `config` sırası ilə, fayllar isə əlifba sırası ilə. **Forma:** `[(slug, category), ...]`. `Claude outputs/` kimi qovluqlar görünmür.
+1. `--delete` **ilk** yoxlanılan flag-dır (`engine/cli.py:271-273`). Ona görə Ollama yoxlanmır və başqa flag-lar nəzərə alınmır.
+2. **`handle_delete`** (`engine/cli.py:201-233`):
+   1. `list_all_notes()` (`engine/main.py:73-79`). Yalnız `config.VAULT_CATEGORIES`-də olan mövcud qovluqlar gəzilir (`vault.category_dirs()`), qovluqlar `config` sırası ilə, fayllar isə əlifba sırası ilə. **Forma:** `[(slug, category), ...]`. `Claude outputs/` kimi qovluqlar görünmür.
    2. Nömrələnmiş siyahı göstərilir və `input()` ilə seçim alınır. `0` və ya yararsız cavab: `Cancelled`.
    3. `Delete '<slug>'? ... (yes/no)` soruşulur. Yalnız `yes` cavabı silir.
-   4. `delete_note_by_slug(slug)` (`engine/main.py:110-116`) üç iş görür:
+   4. `delete_note_by_slug(slug)` (`engine/main.py:129-135`) üç iş görür:
       - `find_note`. **[XƏTA]** Dublikat varsa `RuntimeError` qalxır, `cli` bunu `ERROR: ...` kimi çap edir və **heç nə silinmir**;
       - **[VAULT]** `vault.delete_note`: fayl silinir;
       - **[VAULT]** `memory.remove_entry`: index-dən silinir.
@@ -211,7 +213,7 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.6. `kb --local` (lokal model ilə)
 
-`--local` ayrıca rejim deyil, **modifikator**dur. O, `backend = "local"` təyin edir (`engine/cli.py:255-257`) və yuxarıdakı istənilən rejimlə birlikdə işləyir: `kb --local`, `kb --split --local` və s. Fərq yalnız `llm.ask_json`-dadır (`engine/llm.py:81-86`):
+`--local` ayrıca rejim deyil, **modifikator**dur. O, `backend = "local"` təyin edir (`engine/cli.py:284-286`) və yuxarıdakı istənilən rejimlə birlikdə işləyir: `kb --local`, `kb --split --local` və s. Fərq yalnız `llm.ask_json`-dadır (`engine/llm.py:81-86`):
 
 1. `_ask_json_local` (`engine/llm.py:36-53`): `POST http://localhost:11434/api/generate`. Göndərilənlər:
    - `model = qwen3:14b`, `system`, `prompt`, `stream: false`;
@@ -223,14 +225,14 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.7. `kb --reindex` (texniki baxım; altı rejimə əlavə olaraq)
 
-1. Ollama yoxlamasından sonra `handle_reindex()` çağırılır (`engine/cli.py:250-252`, `207-236`).
-2. `find_index_drift()` (`engine/main.py:72-91`) yalnız oxuyur:
+1. Ollama yoxlamasından sonra `handle_reindex()` çağırılır (`engine/cli.py:279-281`, `236-265`).
+2. `find_index_drift()` (`engine/main.py:93-110`) yalnız oxuyur:
    - `list_all_notes()` ilə diskin xəritəsini qurur: `{slug: [kateqoriyalar]}`;
    - index ilə müqayisə edir və dörd siyahı qaytarır: `missing_file`, `wrong_category`, `not_indexed`, `duplicate`.
    - `find_note`-dan istifadə **etmir**, ona görə dublikat olanda da işləyir.
 3. `check_layout()` (`engine/vault.py:9-18`) çatışmayan və iç-içə kateqoriya qovluqlarını xəbərdarlıq kimi göstərir.
 4. Dəyişiklik yoxdursa: `Index matches the vault. Nothing to repair.`
-5. Əks halda `Apply these changes to the index? (yes/no)` soruşulur. `yes` olarsa, `repair_index(drift)` çağırılır (`engine/main.py:94-107`):
+5. Əks halda `Apply these changes to the index? (yes/no)` soruşulur. `yes` olarsa, `repair_index(drift)` çağırılır (`engine/main.py:113-126`):
    1. **[EMB]** Index-də olmayan qeydlər üçün **əvvəl** bütün embedding-lər alınır. Fayl `markdown_to_json` ilə oxunur, başlıq boşdursa slug istifadə olunur.
    2. **[VAULT]** Sonra index **bir dəfə** yazılır: ghost yazılar silinir, kateqoriyalar diskə uyğunlaşdırılır, yeni yazılar əlavə olunur.
    3. Dublikatlara toxunulmur.
@@ -266,7 +268,7 @@ Hər iz eyni qaydada yazılıb:
 - `CKE_VAULT` boşdursa, defolt yol götürülür (`or`). Dırnaq içində `~` yazılsa da açılır (`expanduser`). `.env`-dən oxunmur (B.0, addım 2).
 - "Bütün tənzimləmələr config-dədir" qaydasının **istisnaları:**
   - `llm.embed`-in timeout-u `60` saniyədir (`engine/llm.py:30`);
-  - `cli.check_ollama`-nın timeout-u `5` saniyədir (`engine/cli.py:18`);
+  - `cli.check_ollama`-nın timeout-u `5` saniyədir (`engine/cli.py:19`);
   - `temperature 0.2`, `top_p 0.95`, `max_tokens 32768` dəyərləri `llm.py`-də birbaşa yazılıb.
 
   Bunlar təmirdən əvvəl də belə idi və dəyişdirilmədi.
@@ -296,7 +298,7 @@ Hər iz eyni qaydada yazılıb:
 | `not_empty` | 80-85 | `title` və `summary` boş ola bilməz. `strip` edir |
 | `at_least_one_section` | 87-92 | Ən azı bir bölmə olmalıdır |
 
-**Kim istifadə edir:** `brain.py` (`Note`, `SplitPlan`) və testlər. `main.process_from_plan` `note.title`-ı sonradan dəyişir (`engine/main.py:138`). Pydantic-də `validate_assignment` defolt olaraq söndürülüb, ona görə bu təyin etmə yoxlanmır. Amma həmin başlıq artıq `PlanEntry`-də yoxlanıb.
+**Kim istifadə edir:** `brain.py` (`Note`, `SplitPlan`) və testlər. `main.process_from_plan` `note.title`-ı sonradan dəyişir (`engine/main.py:161`). Pydantic-də `validate_assignment` defolt olaraq söndürülüb, ona görə bu təyin etmə yoxlanmır. Amma həmin başlıq artıq `PlanEntry`-də yoxlanıb.
 
 **Gözlənilməz cəhət:** `bool` `int`-in alt sinfidir, ona görə `content_to_string`-də ayrıca istisna olunur (`engine/schema.py:34-35`).
 
@@ -308,13 +310,15 @@ Hər iz eyni qaydada yazılıb:
 |---|---|---|---|---|
 | `category_dirs()` | 4-6 | Mövcud kateqoriya qovluqlarının `Path` siyahısı, `config` sırası ilə | `check_layout`, `find_note`, `main.list_all_notes` | — |
 | `check_layout()` | 9-18 | `(missing, nested)`: yuxarıda olmayan classifier kateqoriyaları və `"03 Windows/02 Linux"` kimi iç-içə qovluqlar | `cli.handle_reindex` | `category_dirs` |
-| `find_note(slug)` | 21-33 | `(Path, kateqoriya)` və ya `(None, None)`. Slug iki yerdədirsə, `RuntimeError` | `read_note`, `write_note`, `delete_note`, `main.merge_into`, `main.delete_note_by_slug`, `server.add_note` | `category_dirs` |
-| `read_note(slug)` | 36-40 | Faylın mətni və ya `""` | `main.merge_into` | `find_note` |
-| `write_note(slug, category, markdown)` | 43-50 | `None`. Faylı yazır, slug başqa kateqoriyada idisə köhnəsini silir | `main.save_note` | `find_note` |
-| `delete_note(slug)` | 53-56 | `None`. Faylı silir, fayl yoxdursa heç nə etmir | `main.merge_into`, `main.delete_note_by_slug` | `find_note` |
-| `slugify(title, fallback=True)` | 59-74 | Slug `str` | `main.process`, `merge_into` (`fallback=False`), `process_from_plan`, `process_writeup` | `re`, `hashlib` |
-| `to_markdown(note)` | 77-84 | Markdown `str` | `main.save_note` | — |
-| `markdown_to_json(markdown)` | 87-119 | `{"title", "summary", "sections"}` dict-i | `main.merge_into`, `main.repair_index` | — |
+| `NoteExistsError(slug, category)` | 21-27 | `RuntimeError`-un alt sinfi. Yazı mövcud qeydi əvəz edəcəkdisə qalxır. `.slug` və `.category` daşıyır | `ensure_new`, `write_note` | — |
+| `find_note(slug)` | 30-42 | `(Path, kateqoriya)` və ya `(None, None)`. Slug iki yerdədirsə, `RuntimeError` | `read_note`, `ensure_new`, `write_note`, `delete_note`, `main.merge_into`, `main.delete_note_by_slug`, `server.add_note` | `category_dirs` |
+| `read_note(slug)` | 45-49 | Faylın mətni və ya `""` | `main.merge_into`, `cli.report_existing` | `find_note` |
+| `ensure_new(slug)` | 52-56 | `None`. Slug artıq varsa, `NoteExistsError` | `main.process`, `main.process_from_plan` | `find_note` |
+| `write_note(slug, category, markdown, replace=False)` | 59-70 | `None`. Slug artıq varsa və `replace=False`-dursa, `NoteExistsError`. Əks halda faylı yazır, slug başqa kateqoriyada idisə köhnəsini silir | `main.save_note` | `find_note` |
+| `delete_note(slug)` | 73-76 | `None`. Faylı silir, fayl yoxdursa heç nə etmir | `main.merge_into`, `main.delete_note_by_slug` | `find_note` |
+| `slugify(title, fallback=True)` | 79-94 | Slug `str` | `main.process`, `merge_into` (`fallback=False`), `process_from_plan`, `process_writeup`, `cli.handle_split` | `re`, `hashlib` |
+| `to_markdown(note)` | 97-104 | Markdown `str` | `main.save_note` | — |
+| `markdown_to_json(markdown)` | 107-139 | `{"title", "summary", "sections"}` dict-i | `main.merge_into`, `main.repair_index`, `cli.report_existing` | — |
 
 **Diqqət ediləcək cəhətlər:**
 
@@ -332,7 +336,7 @@ Hər iz eyni qaydada yazılıb:
   - Başlığı yalnız birinci `# ` sətri təyin edir, sonrakı `# ` sətirləri məzmundur.
   - Birinci `## `-dən əvvəlki boş olmayan sətirlər bir sətirlik `summary`-yə birləşdirilir. Ona görə preambula çox sətirli olsa, round-trip-də bir sətrə düşür.
   - **Sadələşdirmə:** CommonMark-ın "bağlayan fence açandan qısa olmamalı və info string-i olmamalıdır" qaydası tətbiq olunmayıb. Real vault-da bu fərq heç bir qeyddə rol oynamır.
-- **`write_note`** "əvvəl yaz, sonra köhnəni sil" qaydası ilə işləyir. Eyni kateqoriyada eyni slug-a yazanda fayl **üzərinə yazılır** (I bölməsinə baxın).
+- **`write_note`** defolt olaraq mövcud qeydi əvəz etmir (`NoteExistsError`, P0-3). `replace=True`-nu yalnız `merge_into` verir, o da yalnız birləşdirilən qeydin öz slug-ı üçün. Bu halda "əvvəl yaz, sonra köhnəni sil" qaydası işləyir.
 - **`find_note`-un dublikatda xəta verməsi** bilərəkdəndir: oxuma, yazma, silmə və merge səhv nüsxəni təxmin etmir, dayanır.
 
 ### C.4. `engine/memory.py`: embedding index-i
@@ -404,22 +408,24 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 
 | Funksiya | Sətir | Qaytarır | Kim çağırır | Kimi çağırır |
 |---|---|---|---|---|
-| `save_note(slug, category, note)` | 4-9 | `None`. Sıra: embedding → fayl → index | `process`, `merge_into`, `process_from_plan`, `process_writeup` | `memory.embed_entry`, `vault.write_note`, `vault.to_markdown`, `memory.save_entry` |
-| `process(text, backend=None)` | 12-24 | slug | `cli.run`, `server.add_note`, `__main__` | `brain.create_note`, `brain.choose_category`, `vault.slugify`, `save_note` |
-| `find_merge_candidates(text)` | 27-28 | Namizəd siyahısı | `cli.run` | `memory.find_top_matches` |
-| `merge_into(text, target_slug, backend=None, confirm_rename=None)` | 31-61 | Son slug | `cli.run` | `vault.read_note`, `markdown_to_json`, `find_note`, `brain.create_note`, `brain.merge_two_notes`, `vault.slugify(fallback=False)`, `confirm_rename`, `save_note`, `vault.delete_note`, `memory.remove_entry` |
-| `list_all_notes()` | 63-69 | `[(slug, category)]` | `find_index_drift`, `cli.handle_delete`, `cli.handle_reindex` | `vault.category_dirs` |
-| `find_index_drift()` | 72-91 | 4 açarlı dict (B.7-yə baxın) | `cli.handle_reindex` | `memory.load_index`, `list_all_notes` |
-| `repair_index(drift)` | 94-107 | `None` | `cli.handle_reindex` | `markdown_to_json`, `memory.embed_entry`, `load_index`, `save_index` |
-| `delete_note_by_slug(slug)` | 110-116 | slug. Tapılmasa `RuntimeError` | `cli.handle_delete` | `vault.find_note`, `vault.delete_note`, `memory.remove_entry` |
-| `propose_split_plan(text, backend=None)` | 118-119 | Plan | `cli.handle_split` | `brain.propose_split` |
-| `process_from_plan(text, note_plan, backend=None)` | 121-142 | `(slug, category)` | `cli.handle_split` | `brain.create_note`, `choose_category`, `slugify`, `save_note` |
-| `process_writeup(text, backend=None)` | 144-151 | slug | `cli.run` | `brain.create_writeup`, `slugify`, `save_note` |
-| `__main__` bloku | 153-159 | — | `python -m engine.main "mətn"` | `process`. Ollama əvvəlcədən yoxlanmır, backend defoltdur |
+| `save_note(slug, category, note, replace=False)` | 4-9 | `None`. Sıra: embedding → fayl → index | `process`, `merge_into`, `process_from_plan`, `process_writeup` | `memory.embed_entry`, `vault.write_note`, `vault.to_markdown`, `memory.save_entry` |
+| `process(text, backend=None)` | 12-26 | slug. Slug artıq varsa, `NoteExistsError` | `cli.run`, `server.add_note`, `__main__` | `brain.create_note`, `vault.slugify`, `vault.ensure_new`, `brain.choose_category`, `save_note` |
+| `find_merge_candidates(text)` | 29-30 | Namizəd siyahısı | `cli.run` | `memory.find_top_matches` |
+| `merge_into(text, target_slug, backend=None, confirm_rename=None)` | 33-71 | Son slug | `cli.run` | `vault.read_note`, `markdown_to_json`, `find_note`, `brain.create_note`, `brain.merge_two_notes`, `vault.slugify(fallback=False)`, `confirm_rename`, `save_note`, `vault.delete_note`, `memory.remove_entry` |
+| `list_all_notes()` | 73-79 | `[(slug, category)]` | `notes_on_disk`, `cli.handle_delete`, `cli.handle_reindex` | `vault.category_dirs` |
+| `notes_on_disk()` | 82-90 | `{slug: [kateqoriyalar]}`. Dublikatda xəta vermir | `find_index_drift`, `cli.handle_split` | `list_all_notes` |
+| `find_index_drift()` | 93-110 | 4 açarlı dict (B.7-yə baxın) | `cli.handle_reindex` | `memory.load_index`, `notes_on_disk` |
+| `repair_index(drift)` | 113-126 | `None` | `cli.handle_reindex` | `markdown_to_json`, `memory.embed_entry`, `load_index`, `save_index` |
+| `delete_note_by_slug(slug)` | 129-135 | slug. Tapılmasa `RuntimeError` | `cli.handle_delete` | `vault.find_note`, `vault.delete_note`, `memory.remove_entry` |
+| `propose_split_plan(text, backend=None)` | 137-138 | Plan | `cli.handle_split` | `brain.propose_split` |
+| `process_from_plan(text, note_plan, backend=None)` | 140-164 | `(slug, category)`. Slug artıq varsa, model çağırılmadan `NoteExistsError` | `cli.handle_split` | `slugify`, `ensure_new`, `brain.create_note`, `choose_category`, `save_note` |
+| `process_writeup(text, backend=None)` | 166-173 | slug | `cli.run` | `brain.create_writeup`, `slugify`, `save_note` |
+| `__main__` bloku | 175-181 | — | `python -m engine.main "mətn"` | `process`. Ollama əvvəlcədən yoxlanmır, backend defoltdur |
 
 **Diqqət ediləcək cəhətlər:**
 
 - `save_note` P1-4-dən gəlir. Dörd yaradılış yolu eyni sıranı paylaşır və sıra yalnız bir yerdə izah olunur.
+- Yaradılış yolları (`process`, `process_from_plan`, `process_writeup`) `replace` vermir, ona görə mövcud qeydi heç vaxt əvəz etmir (P0-3). `process` bunu kateqoriya çağırışından əvvəl, `process_from_plan` isə heç bir model çağırışından əvvəl yoxlayır.
 - `merge_into`-nun `confirm_rename` parametri callback-dir. `None` olanda, məsələn server-də və ya testdə, fayl adı dəyişmir.
 - `merge_into`-da **əvvəl yazılır, sonra silinir**. Proses yarıda qırılsa, iki fayl qalar, amma heç biri itməz.
 - `find_index_drift` `find_note`-u çağırmır (B.7).
@@ -431,16 +437,17 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 
 | Funksiya / sinif | Sətir | Qaytarır | Kim çağırır |
 |---|---|---|---|
-| `with_tag(model)` | 10-12 | Tag-ı olmayan ada `:latest` əlavə edir | `check_ollama` |
-| `check_ollama()` | 15-24 | `bool`: HTTP 200 qaytarılıb və embedding modeli var | `require_ollama`; testlər |
-| `require_ollama()` | 27-31 | Uğursuz olanda `sys.exit(1)` | `run` |
-| `confirm_rename(old_slug, new_slug)` | 34-40 | `bool`. TTY yoxdursa `False` | `run` (`ask_rename` vasitəsilə) |
-| `get_input_text(args)` | 43-58 | `str`: `--file` faylı, arqumentlər və ya `stdin` | `run` |
-| `Spinner` | 61-86 | Ayrı thread-də `\|/-\` animasiyası. `start()`, `stop()` | `run`, `handle_split` |
-| `handle_split(backend, text)` | 88-170 | `None` | `run` |
-| `handle_delete()` | 172-204 | `None` | `run` |
-| `handle_reindex()` | 207-236 | `None` | `run` |
-| `run()` | 239-356 | `None` və ya `sys.exit(1)` | `__main__` (`python -m engine.cli`) |
+| `with_tag(model)` | 11-13 | Tag-ı olmayan ada `:latest` əlavə edir | `check_ollama` |
+| `check_ollama()` | 16-25 | `bool`: HTTP 200 qaytarılıb və embedding modeli var | `require_ollama`; testlər |
+| `require_ollama()` | 28-32 | Uğursuz olanda `sys.exit(1)` | `run` |
+| `confirm_rename(old_slug, new_slug)` | 35-41 | `bool`. TTY yoxdursa `False` | `run` (`ask_rename` vasitəsilə) |
+| `report_existing(error)` | 44-52 | `None`. Adi `kb` dayananda mövcud qeydin başlığını, kateqoriyasını və yolunu göstərir, `kb --merge` təklif edir | `run` |
+| `get_input_text(args)` | 55-70 | `str`: `--file` faylı, arqumentlər və ya `stdin` | `run` |
+| `Spinner` | 73-98 | Ayrı thread-də `\|/-\` animasiyası. `start()`, `stop()` | `run`, `handle_split` |
+| `handle_split(backend, text)` | 100-199 | `None` | `run` |
+| `handle_delete()` | 201-233 | `None` | `run` |
+| `handle_reindex()` | 236-265 | `None` | `run` |
+| `run()` | 268-389 | `None` və ya `sys.exit(1)` | `__main__` (`python -m engine.cli`) |
 
 **`run()`-un sırası:**
 
@@ -456,9 +463,9 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 
 **Diqqət ediləcək cəhətlər:**
 
-- `--file` yalnız flag-lar silindikdən sonra **ilk qalan arqument** olanda tanınır (`engine/cli.py:44`). `kb --split --file x.md` və `kb --file x.md --merge` işləyir, çünki flag-lar istənilən yerdən silinir.
-- Rename sualı verilməzdən əvvəl spinner dayandırılır (`ask_rename`, `engine/cli.py:328-330`). Əks halda spinner-in `\r` yazıları sualın üstünə düşərdi.
-- `handle_split`-də plan elementləri `dict`-dir. CLI-ın özünün yaratdığı birləşdirilmiş element də `dict`-dir (`engine/cli.py:143-144`).
+- `--file` yalnız flag-lar silindikdən sonra **ilk qalan arqument** olanda tanınır (`engine/cli.py:56`). `kb --split --file x.md` və `kb --file x.md --merge` işləyir, çünki flag-lar istənilən yerdən silinir.
+- Rename sualı verilməzdən əvvəl spinner dayandırılır (`ask_rename`, `engine/cli.py:357-359`). Əks halda spinner-in `\r` yazıları sualın üstünə düşərdi.
+- `handle_split`-də plan elementləri `dict`-dir. CLI-ın özünün yaratdığı birləşdirilmiş element də `dict`-dir (`engine/cli.py:162-163`).
 - Uzunluq hədləri: adi `kb` və `--merge` üçün 30, `--split` və `--writeup` üçün 100 simvol. Qısa mətndə adi `kb` `exit(1)` edir, `--split` və `--writeup` isə sadəcə qayıdır.
 
 ### C.9. `engine/server.py`: köhnə (legacy) HTTP server
@@ -486,7 +493,7 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 - **`engine/__init__.py`**: boşdur (0 bayt). Yalnız `engine` qovluğunu Python paketi kimi işarələyir ki, `python -m engine.cli` və `from engine import ...` işləsin.
 - **`kb`** (4 sətir): `cd ~/cke`, `source venv/bin/activate`, `python3 -m engine.cli "$@"`. `~/cke` yolu skriptin içində birbaşa yazılıb, ona görə repo başqa yerə clone edilsə, skript də dəyişdirilməlidir.
 - **`kb-local.sh`**: təmir zamanı silindi (`9b4d2f8`). Heç yerdən çağırılmırdı. Onun `nano` açma funksiyasını indi `kb --file <path>` əvəz edir.
-- **`tests/test_cke.py`** (699 sətir) və **`tests/fixtures/`** (4 sintetik qeyd):
+- **`tests/test_cke.py`** (811 sətir, 70 test) və **`tests/fixtures/`** (4 sintetik qeyd):
   - **Təhlükəsizlik qurğusu** (`30-41`):
     - `REAL_VAULT` istifadəçinin başlanğıcdakı `CKE_VAULT` dəyəridir;
     - `TEST_VAULT` müvəqqəti qovluqdur;
@@ -500,10 +507,11 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
     - `VaultTestCase` (97): hər test üçün boş vault yaradır, `llm.embed`-i saxta funksiya ilə əvəz edir, `llm.ask_json`-u bloklayır (model çağırılarsa test sınır), `stdout`-u tutur.
   - **Test sinifləri bəndlərə görə adlandırılıb:**
     - `P0_1_ParserTests` (143), `P0_1_RealVaultRoundTrip` (181, yalnız `CKE_VAULT` təyin olunanda işləyir, vault-dan yalnız oxuyur), `P0_1_MergeSafetyTests` (203);
-    - `P0_2_DuplicateSlugTests` (270), `P1_1_ReindexTests` (309), `P1_2_CategoryFolderTests` (376), `P1_3_LayoutCheckTests` (409);
-    - `P1_4_OllamaCheckTests` (426), `P1_4_CliChecksOllamaFirstTests` (453), `P1_4_NoUnindexedNoteTests` (484);
-    - `P1_5_SectionContentTests` (531), `P1_6_SlugifyTests` (578);
-    - `P2_1_SplitPlanTests` (610), `P2_4_DefaultBackendTests` (647), `P2_6_ServerAuthTests` (668).
+    - `P0_2_DuplicateSlugTests` (270), `P0_3_NoOverwriteTests` (313);
+    - `P1_1_ReindexTests` (421), `P1_2_CategoryFolderTests` (488), `P1_3_LayoutCheckTests` (521);
+    - `P1_4_OllamaCheckTests` (538), `P1_4_CliChecksOllamaFirstTests` (565), `P1_4_NoUnindexedNoteTests` (596);
+    - `P1_5_SectionContentTests` (643), `P1_6_SlugifyTests` (690);
+    - `P2_1_SplitPlanTests` (722), `P2_4_DefaultBackendTests` (759), `P2_6_ServerAuthTests` (780).
   - **İşə salmaq:** `cd ~/cke && source venv/bin/activate && python -m unittest discover -s tests -v`. Real vault yoxlaması da lazımdırsa, əvvəlinə `CKE_VAULT=~/Documents/CyberKB` əlavə edin. Python 3.11+ tələb olunur (`enterContext`).
   - **Fixture-lar** HTB materialı deyil, əl ilə yazılmış qısa nümunələrdir:
     - `code_comment.md`: kod blokunda `#` şərhi;
@@ -517,7 +525,7 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 
 ### D.1. Qeydin Markdown forması
 
-`vault.to_markdown` (`engine/vault.py:77-84`) bu formanı yaradır:
+`vault.to_markdown` (`engine/vault.py:97-104`) bu formanı yaradır:
 
 ```text
 # <title>
@@ -720,7 +728,7 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 
 ### F.3. İki addımlı merge: əvvəl strukturlaşdır, sonra birləşdir
 
-- **Seçim:** `merge_into` əvvəl yeni mətni `create_note` ilə strukturlu `Note`-a çevirir, sonra iki strukturlu qeydi `merge_two_notes`-a verir (`engine/main.py:39-41`).
+- **Seçim:** `merge_into` əvvəl yeni mətni `create_note` ilə strukturlu `Note`-a çevirir, sonra iki strukturlu qeydi `merge_two_notes`-a verir (`engine/main.py:41-43`).
 - **Alternativ:** mövcud qeydi və xam mətni bir prompt-da birləşdirmək.
 - **Qiyməti:**
   - Hər prompt-un bir işi var. `MERGE_SYSTEM` eyni formalı iki girişlə işləyir, bu da tapşırığı sadələşdirir.
@@ -764,11 +772,11 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 - **Digər timeout-lar:**
   - DeepSeek üçün `API_TIMEOUT = 600` saniyə, o da hər sorğu üçündür;
   - embedding üçün 60 saniyə (`engine/llm.py:30`);
-  - Ollama yoxlaması üçün 5 saniyə (`engine/cli.py:18`).
+  - Ollama yoxlaması üçün 5 saniyə (`engine/cli.py:19`).
 
 ### F.8. Split planının insan tərəfindən təsdiqi
 
-- **Seçim:** model yalnız plan təklif edir. İstifadəçi elementləri birləşdirə, ata və ya bütün işi dayandıra bilər (`engine/cli.py:114-153`).
+- **Seçim:** model yalnız plan təklif edir. İstifadəçi elementləri birləşdirə, ata və ya bütün işi dayandıra bilər (`engine/cli.py:126-172`).
 - **Alternativ:** modelin planına birbaşa əməl etmək.
 - **Qiyməti:**
   - Hər `--split` interaktivdir və avtomatlaşdırılmır.
@@ -804,7 +812,7 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 
 | Simptom | Səbəb | Harada qalxır | Həlli |
 |---|---|---|---|
-| `ERROR: Ollama is not reachable at ..., or the embedding model 'nomic-embed-text' is not pulled` | Ollama işləmir və ya model yüklənməyib | `engine/cli.py:27-31` (`require_ollama`) | Ollama-nı işə salın, `ollama pull nomic-embed-text` |
+| `ERROR: Ollama is not reachable at ..., or the embedding model 'nomic-embed-text' is not pulled` | Ollama işləmir və ya model yüklənməyib | `engine/cli.py:28-32` (`require_ollama`) | Ollama-nı işə salın, `ollama pull nomic-embed-text` |
 | Server-də 500: `ConnectionError ... /api/embeddings` | Server Ollama-nı əvvəlcədən yoxlamır | `engine/llm.py:27-32` (`embed`), `engine/main.py:7` | Ollama-nı işə salın. Fayl yazılmayıb |
 | `--local`-da HTTP 404 və ya model xətası | `qwen3:14b` yüklənməyib (CLI bunu yoxlamır) | `engine/llm.py:37-51` (`_ask_json_local`) | `ollama pull qwen3:14b` |
 | `ERROR: DEEPSEEK_API_KEY not found. Check your .env file.` | `.env` yoxdur və ya açar boşdur | `engine/llm.py:18-20` | `~/cke/.env`-ə `DEEPSEEK_API_KEY=...` yazın |
@@ -813,14 +821,15 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 | `Attempt N rejected: ... JSON ...` | Model cavabında JSON yoxdur və ya JSON pozulub | `engine/llm.py:76-78` (`_extract_json`) | Avtomatik retry olunur |
 | `Attempt N rejected: ... validation error ...` | JSON var, amma forması səhvdir: boş başlıq, `content` `None`-dur və s. | `engine/brain.py:120` → `engine/schema.py` | Avtomatik retry olunur, səhv mesajı prompt-a əlavə edilir |
 | `ERROR: Model failed to produce valid output after 3 attempts. Last error: ...` | Üç cəhdin üçü də uğursuz olub | `engine/brain.py:124` | Mətni qısaldın və ya sadələşdirin, `--local` ilə sınayın. Heç nə yazılmayıb |
-| `ERROR during planning: ...` | `--split` planı 3 cəhddən sonra da yararsızdır | `engine/cli.py:104-107` | Yenidən işə salın və ya mətni bölün. Heç nə yazılmayıb |
-| `ERROR: Note '<slug>' not found` (merge) | Index-də ghost yazı var: fayl silinib və ya köçürülüb | `engine/main.py:33-34` | `kb --reindex` |
-| `ERROR: Note '<slug>' exists in more than one category (...)` | Eyni slug iki qovluqdadır | `engine/vault.py:27-30` (`find_note`) | Bir faylı əl ilə silin, sonra `kb --reindex` |
-| `ERROR: Merged title '...' gives an empty filename. Nothing was changed.` | Model yararsız başlıq qaytarıb | `engine/main.py:45-46` | Merge-i yenidən işə salın. Vault dəyişməyib |
-| `Title changed to '...'; keeping the filename ...` | Merge başlığı dəyişib, amma rename təsdiqlənməyib | `engine/main.py:49-51` | Xəta deyil, qəsdən belədir |
-| `Input too short (N chars). Nothing saved.` | `kb`/`--merge` üçün 30-dan, `--split`/`--writeup` üçün 100-dən az simvol | `engine/cli.py:294-296`, `92-94`, `269-271` | Daha uzun mətn verin |
-| `File not found: <path>` | `--file` yolu səhvdir | `engine/cli.py:49-51` | Yolu yoxlayın |
-| `kb --reindex` hesabatında `remove from index` / `fix category` / `add to index` | Index və vault uyğunsuzdur (Finder/Obsidian-da silmə və ya köçürmə) | `engine/main.py:72-91` | `yes` cavabı verin |
+| `ERROR during planning: ...` | `--split` planı 3 cəhddən sonra da yararsızdır | `engine/cli.py:116-119` | Yenidən işə salın və ya mətni bölün. Heç nə yazılmayıb |
+| `ERROR: Note '<slug>' not found` (merge) | Index-də ghost yazı var: fayl silinib və ya köçürülüb | `engine/main.py:35-36` | `kb --reindex` |
+| `ERROR: Note '<slug>' exists in more than one category (...)` | Eyni slug iki qovluqdadır | `engine/vault.py:36-39` (`find_note`) | Bir faylı əl ilə silin, sonra `kb --reindex` |
+| `ERROR: Merged title '...' gives an empty filename. Nothing was changed.` | Model yararsız başlıq qaytarıb | `engine/main.py:47-48` | Merge-i yenidən işə salın. Vault dəyişməyib |
+| `Title changed to '...'; keeping the filename ...` (və ya `..., but <kateqoriya>/<slug>.md is another note; keeping the filename ...`) | Merge başlığı dəyişib, amma rename təsdiqlənməyib, və ya yeni ad başqa qeydə aiddir | `engine/main.py:52-60` | Xəta deyil, qəsdən belədir |
+| `STOPPED: a note with this filename already exists. Nothing was written.` (`kb`), `skipped (already exists): ...` (`--split`), `ERROR: Note '<slug>' already exists in ...` (`--writeup`; server-də 500) | Bu slug-lı qeyd vault-da artıq var. Yaradılış mövcud qeydi heç vaxt əvəz etmir (P0-3) | `engine/vault.py:52-56` (`ensure_new`), `59-70` (`write_note`) | Mətni mövcud qeydə əlavə etmək üçün `kb --merge`. `--split`-də elementi `drop` etmək olar |
+| `Input too short (N chars). Nothing saved.` | `kb`/`--merge` üçün 30-dan, `--split`/`--writeup` üçün 100-dən az simvol | `engine/cli.py:323-325`, `104-106`, `298-300` | Daha uzun mətn verin |
+| `File not found: <path>` | `--file` yolu səhvdir | `engine/cli.py:61-63` | Yolu yoxlayın |
+| `kb --reindex` hesabatında `remove from index` / `fix category` / `add to index` | Index və vault uyğunsuzdur (Finder/Obsidian-da silmə və ya köçürmə) | `engine/main.py:93-110` | `yes` cavabı verin |
 | `kb --reindex`-də `WARNING ... nested` / `missing at the top level` | Kateqoriya qovluğu yanlış yerdədir | `engine/vault.py:9-18` | Qovluğu əl ilə düzəldin |
 | Server `401 {"error": "unauthorized"}` | Public rejimdə token yoxdur və ya səhvdir | `engine/server.py:30-31` | `Authorization: Bearer <CKE_SERVER_TOKEN>` göndərin |
 | `server.log`-da `Address already in use` | Port 8000 məşğuldur, məsələn server əl ilə ikinci dəfə işə salınıb | Flask/werkzeug, `engine/server.py:59` | Əl ilə işə salmayın. launchd agent-i kifayətdir |
@@ -858,20 +867,20 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
 
 ### H.4. Yeni CLI rejimi
 
-1. `engine/cli.py`-də `run()`-a flag qolu əlavə edin. Rejim embedding tələb edirsə, qol `require_ollama()`-dan (`engine/cli.py:248`) sonra olmalıdır, tələb etmirsə, `--delete` kimi ondan əvvəl.
+1. `engine/cli.py`-də `run()`-a flag qolu əlavə edin. Rejim embedding tələb edirsə, qol `require_ollama()`-dan (`engine/cli.py:277`) sonra olmalıdır, tələb etmirsə, `--delete` kimi ondan əvvəl.
 2. İnteraktiv hissəni `handle_<ad>()` funksiyasına, iş axınını isə `engine/main.py`-yə yazın. Yazma lazımdırsa, `save_note`-dan istifadə edin ki, sıra qorunsun.
 3. Yeni prompt lazımdırsa, `engine/brain.py`-də onu və `generate_validated`-i çağıran funksiyanı əlavə edin. Yeni cavab forması lazımdırsa, `engine/schema.py`-də model yazın və onu `schema=` ilə ötürün (`--split` kimi).
 4. `tests/test_cke.py`-yə `VaultTestCase` əsasında test əlavə edin.
 
-**Qiymətləndirmə:** nümunə hazırdır (`--writeup` ən sadəsidir). `run()` uzun bir funksiyadır (`engine/cli.py:239-356`), ona görə flag-ların sırası diqqət tələb edir.
+**Qiymətləndirmə:** nümunə hazırdır (`--writeup` ən sadəsidir). `run()` uzun bir funksiyadır (`engine/cli.py:268-389`), ona görə flag-ların sırası diqqət tələb edir.
 
 ### H.5. Başqa saxlama formatı
 
 Ən çox bağlılıq buradadır:
 
 - `vault.to_markdown` / `markdown_to_json` formatın özüdür. Onları dəyişmək kifayət deyil.
-- `main.repair_index` faylın yolunu özü qurur (`engine/main.py:99`, `config.VAULT / category / f"{slug}.md"`). Bu, saxlama detalının `main.py`-yə sızmasıdır.
-- `list_all_notes` `*.md` uzantısına bağlıdır (`engine/main.py:66`).
+- `main.repair_index` faylın yolunu özü qurur (`engine/main.py:118`, `config.VAULT / category / f"{slug}.md"`). Bu, saxlama detalının `main.py`-yə sızmasıdır.
+- `list_all_notes` `*.md` uzantısına bağlıdır (`engine/main.py:76`).
 - Slug həm fayl adı, həm də index açarıdır. Saxlama formatı dəyişsə, açar sxemi də yenidən düşünülməlidir.
 - `server.add_note` kateqoriyanı `vault.find_note` ilə tapır.
 
@@ -884,23 +893,22 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
 ### Məhdudiyyətlər
 
 1. **Merge dəqiqliyi ölçülməyib.** `CANDIDATE_THRESHOLD = 0.60` hiss ilə seçilib. Benchmark yoxdur.
-2. **Adi `kb` mövcud qeydin üzərinə yazır.** Slug eyni kateqoriyada artıq mövcud olanda köhnə məzmun tamamilə itir (`engine/vault.py:47`). Bu, köhnə davranışdır və təmirdə dəyişdirilmədi (`Solution.md` → "Hələ açıq", 1-ci bənd).
-3. **Avtomatik məna yoxlaması yoxdur.** "Bir mövzu = bir qeyd" qaydası insanın seçiminə və slug unikallığına əsaslanır (A bölməsi).
-4. **Server `--split` və `--writeup` edə bilmir.** Yalnız `process`-i import edir (`engine/server.py:5`).
-5. **Server Ollama-nı əvvəlcədən yoxlamır.** Ollama sönülü olanda DeepSeek xərci itir, fayl isə yazılmır.
-6. **Index sinxronlaşdırılan qovluqdadır.** `.kb_index.json` Syncthing ilə sinxronlaşır. Pipeline iki maşında eyni vaxtda işləsə, konflikt yarana bilər.
-7. **Index atomik yazılmır** (`engine/memory.py:12`). Yazma yarıda kəsilsə, fayl korlana bilər.
-8. **Prompt injection qarşısı alınmayıb.** Etibarsız mətn birbaşa LLM-ə gedir və modelin nəticəsi diskə yazılır. Məsələn, kopyalanan materialın içində "əvvəlki göstərişləri unut və ..." kimi gizli təlimat ola bilər. Hazırkı müdafiə yalnız bunlardır:
+2. **Avtomatik məna yoxlaması yoxdur.** "Bir mövzu = bir qeyd" qaydası insanın seçiminə və slug unikallığına əsaslanır (A bölməsi).
+3. **Server `--split` və `--writeup` edə bilmir.** Yalnız `process`-i import edir (`engine/server.py:5`).
+4. **Server Ollama-nı əvvəlcədən yoxlamır.** Ollama sönülü olanda DeepSeek xərci itir, fayl isə yazılmır.
+5. **Index sinxronlaşdırılan qovluqdadır.** `.kb_index.json` Syncthing ilə sinxronlaşır. Pipeline iki maşında eyni vaxtda işləsə, konflikt yarana bilər.
+6. **Index atomik yazılmır** (`engine/memory.py:12`). Yazma yarıda kəsilsə, fayl korlana bilər.
+7. **Prompt injection qarşısı alınmayıb.** Etibarsız mətn birbaşa LLM-ə gedir və modelin nəticəsi diskə yazılır. Məsələn, kopyalanan materialın içində "əvvəlki göstərişləri unut və ..." kimi gizli təlimat ola bilər. Hazırkı müdafiə yalnız bunlardır:
    - schema yalnız gözlənilən JSON formasını qəbul edir;
    - kateqoriya siyahıdan kənara çıxa bilmir;
    - slug yol keçidinə (path traversal) imkan vermir;
    - server defolt olaraq yalnız localhost-da dinləyir.
 
    Qeydin **məzmununu** heç nə yoxlamır.
-9. **`--local` chat modelinin varlığını yoxlamır.** Yalnız embedding modeli yoxlanır.
-10. **Fence qaydası sadələşdirilib** (C.3), çox sətirli preambula isə bir sətrə birləşir.
-11. **Qeyri-latın başlıqlar** slug-da hərflərini itirir (`"Café"` → `"caf"`). Heç bir latın hərfi qalmırsa, `untitled-<hash>` alınır.
-12. **Bəzi timeout-lar config-də deyil** (C.1).
+8. **`--local` chat modelinin varlığını yoxlamır.** Yalnız embedding modeli yoxlanır.
+9. **Fence qaydası sadələşdirilib** (C.3), çox sətirli preambula isə bir sətrə birləşir.
+10. **Qeyri-latın başlıqlar** slug-da hərflərini itirir (`"Café"` → `"caf"`). Heç bir latın hərfi qalmırsa, `untitled-<hash>` alınır.
+11. **Bəzi timeout-lar config-də deyil** (C.1).
 
 ### Gələcək iş
 
@@ -910,10 +918,9 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
    - log rotation-u launchd və ya `newsyslog` vasitəsilə həll etmək.
 
    Bu, Nazirin 2026-10-12 qərarıdır: hələlik localhost (variant a), token yolu isə server yenidən yazılanda.
-2. Adi `kb` üçün qoruma: slug mövcuddursa dayansın və `--merge` təklif etsin.
-3. Index üçün atomik yazma: müvəqqəti fayl, sonra `os.replace`.
-4. `CANDIDATE_THRESHOLD` üçün kiçik, əl ilə etiketlənmiş benchmark.
-5. Prompt injection üçün ən azı bunlar: girişin sərhədlərini açıq qeyd etmək və nəticəni məzmun baxımından yoxlamaq.
+2. Index üçün atomik yazma: müvəqqəti fayl, sonra `os.replace`.
+3. `CANDIDATE_THRESHOLD` üçün kiçik, əl ilə etiketlənmiş benchmark.
+4. Prompt injection üçün ən azı bunlar: girişin sərhədlərini açıq qeyd etmək və nəticəni məzmun baxımından yoxlamaq.
 
 Təmir tapşırığındakı P2 bəndlərinin hamısı bağlanıb. P2-6-da kod hazırdır, token qurulması isə yuxarıdakı səbəblə təxirə salınıb.
 
