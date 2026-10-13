@@ -820,6 +820,8 @@ $ python -m unittest discover -s tests
 OK (skipped=1)
 ```
 
+**Qeyd (2026-10-13):** silinmə qərarı Nazirin gələcək planını bilmədən verilib. Nazir modulu 100K sözlük girişlər üçün saxlayırdı. Modul git tarixçəsində qalır (`git show 65d8b47^:engine/chunker.py`). Geri qaytarılmadı, çünki yenidən yazılmalıdır (`Explanation.md`, I bölməsi, gələcək iş 2).
+
 **Commit:** `65d8b47 refactor(P2-2): delete unused chunker module`
 
 ---

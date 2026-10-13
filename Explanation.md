@@ -152,7 +152,7 @@ Hər iz eyni qaydada yazılıb:
    6. **[XƏTA]** Bir qeyddə başqa xəta olarsa, `ERROR on '<title>'` çap olunur və **növbəti qeydə keçilir**. Artıq yaradılmış qeydlər qalır.
 7. Sonda `Done. Created N note(s).` çap olunur. Keçilən element varsa, `Skipped M existing note(s), not overwritten:` və hər birinin yolu çap olunur (`engine/cli.py:194-199`).
 
-**Xülasə:** N qeyd üçün `1 + 2N` LLM çağırışı (retry-lər bura daxil deyil). Keçilən qeyd model çağırmır. Mənbə mətnin hamısı hər qeyd üçün yenidən göndərilir, ona görə xərc təxminən `N × mətnin uzunluğu` qədərdir.
+**Xülasə:** N qeyd üçün `1 + 2N` LLM çağırışı (retry-lər bura daxil deyil). Keçilən qeyd model çağırmır. Mənbə mətnin hamısı hər qeyd üçün yenidən göndərilir, ona görə xərc təxminən `N × mətnin uzunluğu` qədərdir (I bölməsi, gələcək iş 3).
 
 ### B.3. `kb --writeup` (maşın həllini writeup-a çevirmək)
 
@@ -918,9 +918,18 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
    - log rotation-u launchd və ya `newsyslog` vasitəsilə həll etmək.
 
    Bu, Nazirin 2026-10-12 qərarıdır: hələlik localhost (variant a), token yolu isə server yenidən yazılanda.
-2. Index üçün atomik yazma: müvəqqəti fayl, sonra `os.replace`.
-3. `CANDIDATE_THRESHOLD` üçün kiçik, əl ilə etiketlənmiş benchmark.
-4. Prompt injection üçün ən azı bunlar: girişin sərhədlərini açıq qeyd etmək və nəticəni məzmun baxımından yoxlamaq.
+2. **Böyük girişlər üçün chunking.** `--split` mətni modelə bütöv göndərir, onu kontekstə sığdıracaq mexanizm isə yoxdur. Giriş və çıxış birlikdə 128K tokenlik kontekstə sığmalıdır. Çıxışa `max_tokens=32768` ayrılıb (`engine/llm.py:66`), ona görə system prompt-dan sonra girişə təxminən 95K token qalır.
+   - Adi ingilis mətnində (~1.3 token/söz) bu, təxminən **70K söz** edir. Əmrlər, hash-lər və IP-lər token sayını artırır. Köhnə modulun öz ehtiyatlı təxmini ilə (1.8 token/söz) hədd ~50K sözdür. 100K sözlük giriş üçün chunking hər halda lazımdır.
+   - `--local`-da hədd xeyli aşağıdır: `NUM_CTX = 8192` token (`engine/config.py:27`).
+   - 128K rəqəminin özü yoxlanmayıb (`Solution.md` → "Hələ açıq").
+
+   Köhnə modul `65d8b47^`-də qalır (`git show 65d8b47^:engine/chunker.py`), amma olduğu kimi qaytarılmamalıdır: `####` başlıqlarını tanımırdı və kod blokundakı `# ` sətrini başlıq sayırdı. Onu yenidən yazmaq lazımdır. Təməl P0-1-in fence-aware parseri olmalıdır (`engine/vault.py:107-139`).
+3. **`--split` hər qeyd üçün bütün mətni yenidən göndərir.** `process_from_plan` hər plan elementi üçün `focus_prompt`-a **tam** mənbə mətni qoyur (`engine/main.py:150-158`). 50 qeydlik planda eyni modul 50 dəfə göndərilir, API xərci və vaxt da təxminən o qədər artır. Bu problem chunking-dən asılı deyil və kiçik modullarda da indi xərc yaradır.
+   - Kontekst limiti hər çağırışa ayrıca tətbiq olunur. Qeydlərin sayı limiti özü aşmır, amma mətn bir çağırışa sığmırsa, 50 çağırışın heç biri sığmır.
+   - **Həll:** hər qeydə yalnız öz hissəsini göndərmək. Plan hər element üçün artıq `source_hint` qaytarır ("which heading(s) or part(s) of the input this note draws from", `engine/brain.py:195`). Hazırda bu sahə mətni kəsmək üçün istifadə olunmur, prompt-a yalnız göstəriş kimi gedir. Chunking-in parseri ilə birlikdə hissəni məhz bu sahəyə görə seçmək olar.
+4. Index üçün atomik yazma: müvəqqəti fayl, sonra `os.replace`.
+5. `CANDIDATE_THRESHOLD` üçün kiçik, əl ilə etiketlənmiş benchmark.
+6. Prompt injection üçün ən azı bunlar: girişin sərhədlərini açıq qeyd etmək və nəticəni məzmun baxımından yoxlamaq.
 
 Təmir tapşırığındakı P2 bəndlərinin hamısı bağlanıb. P2-6-da kod hazırdır, token qurulması isə yuxarıdakı səbəblə təxirə salınıb.
 
