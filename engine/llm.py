@@ -62,9 +62,11 @@ def _ask_json_api(system, prompt):
             {"role": "user", "content": prompt},
         ],
         temperature=0.2,
-        top_p=0.95,
         max_tokens=32768,
         stream=False,
+        # deepseek-flash thinks by default, and in thinking mode temperature is silently ignored.
+        # top_p is not sent: outside thinking mode deepseek-flash fixes it at 1.0.
+        extra_body={"thinking": {"type": "disabled"}},
     )
     raw = completion.choices[0].message.content
     return _extract_json(raw)

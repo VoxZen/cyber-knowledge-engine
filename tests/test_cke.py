@@ -32,6 +32,7 @@ TEST_VAULT = Path(tempfile.mkdtemp(prefix="cke-test-vault-"))
 os.environ["CKE_VAULT"] = str(TEST_VAULT)
 
 import requests
+from openai.types.chat import ChatCompletion
 from pydantic import ValidationError
 
 from engine import brain, cli, config, llm, main, memory, vault
@@ -805,6 +806,35 @@ class P2_6_ServerAuthTests(VaultTestCase):
 
     def test_public_server_without_configured_token_accepts_nothing(self):
         self.assertEqual(self.post(False, "", {"Authorization": "Bearer "}), (401, False))
+
+
+# ---------------------------------------------------------------- API calls
+
+def api_completion(content='{"category": "08 Tools"}'):
+    """A chat completion shaped like a real deepseek-flash response (checked 2026-10-16)."""
+    return ChatCompletion.model_validate({
+        "id": "test", "object": "chat.completion", "created": 0, "model": "deepseek-flash",
+        "choices": [{"index": 0, "finish_reason": "stop",
+                     "message": {"role": "assistant", "content": content}}],
+    })
+
+
+class ApiRequestTests(unittest.TestCase):
+    """The DeepSeek request: thinking off, so temperature applies; no top_p."""
+
+    def call_api(self, completion):
+        client = mock.Mock()
+        client.chat.completions.create.return_value = completion
+        with mock.patch.object(llm, "get_api_client", return_value=client):
+            result = llm._ask_json_api("system", "prompt")
+        return result, client.chat.completions.create.call_args.kwargs
+
+    def test_thinking_is_disabled_and_top_p_is_not_sent(self):
+        result, sent = self.call_api(api_completion())
+        self.assertEqual(result, {"category": "08 Tools"})
+        self.assertEqual(sent["extra_body"], {"thinking": {"type": "disabled"}})
+        self.assertEqual(sent["temperature"], 0.2)
+        self.assertNotIn("top_p", sent)
 
 
 if __name__ == "__main__":
