@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 import requests
-from engine import main, config, llm, vault
+from engine import main, config, llm, memory, vault
 from engine.main import process, find_merge_candidates, merge_into
 from engine.vault import NoteExistsError
 
@@ -97,6 +97,18 @@ class Spinner:
         if self.thread:
             self.thread.join()
 
+def nearest_note(note, cache):
+    """The indexed note closest to a plan entry's title + covers, or None below CANDIDATE_THRESHOLD.
+
+    Cached by (title, covers), so drawing the plan again after 'drop' embeds nothing new.
+    """
+    key = (note["title"], note.get("covers", ""))
+    if key not in cache:
+        matches = memory.find_top_matches(f"{key[0]}\n{key[1]}", limit=1)
+        cache[key] = matches[0] if matches else None
+    return cache[key]
+
+
 def handle_split(backend, text):
     from engine.main import propose_split_plan, process_from_plan
 
@@ -123,18 +135,37 @@ def handle_split(backend, text):
         print("No notes proposed. Nothing saved.")
         return
 
+    nearest = {}
     while True:
         # A plan title is its filename. Mark the ones already in the vault, so they can be dropped.
         on_disk = main.notes_on_disk()
+        # Also show the closest indexed note, so a near duplicate can be dropped by hand.
+        # An entry marked [exists] is skipped anyway and needs no embedding.
+        spinner = Spinner("Checking the index for similar notes")
+        spinner.start()
+        try:
+            similar = [None if vault.slugify(note["title"]) in on_disk else nearest_note(note, nearest)
+                       for note in plan]
+        except requests.exceptions.RequestException as e:
+            spinner.stop()
+            # Saving a note needs an embedding too, so going on would only pay for notes that fail
+            print(f"ERROR: embedding failed while checking for similar notes: {e}")
+            print("Is Ollama still running? Nothing saved.")
+            return
+        spinner.stop()
         print("\nProposed atomic notes:")
-        for i, note in enumerate(plan, 1):
+        for i, (note, match) in enumerate(zip(plan, similar), 1):
             categories = on_disk.get(vault.slugify(note["title"]))
             exists = f"  [exists: {', '.join(categories)}]" if categories else ""
-            print(f"  {i}. {note['title']}  [{note.get('type', '?')}]{exists}")
+            near = f"  ≈ {match[0]} ({match[3]:.2f}, {match[2]})" if match else ""
+            print(f"  {i}. {note['title']}  [{note.get('type', '?')}]{exists}{near}")
             print(f"       {note.get('covers', '')}")
         if any(vault.slugify(note["title"]) in on_disk for note in plan):
             print("\n  [exists] = a note with this filename is already in the vault. "
                   "It will be skipped, not overwritten.")
+        if any(similar):
+            print("\n  ≈ = the most similar note in the index, with its score. "
+                  "Shown only: nothing is merged or dropped by itself.")
         print("\nOptions:")
         print("  - Press Enter to CREATE all notes as shown")
         print("  - Type 'merge 2 3' to combine notes 2 and 3 into one")

@@ -362,8 +362,10 @@ class P0_3_NoOverwriteTests(VaultTestCase):
 
     def run_split(self, plan, answer):
         new_note = lambda *args, **kwargs: make_note("model title")
+        # fake_embed makes most texts look alike; the near-duplicate marks have their own tests
         with mock.patch.object(sys, "argv", ["kb", "--split", self.LONG_TEXT]), \
              mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(memory, "find_top_matches", return_value=[]), \
              mock.patch.object(main, "propose_split_plan", return_value=plan), \
              mock.patch.object(brain, "create_note", side_effect=new_note) as create, \
              mock.patch.object(brain, "choose_category", return_value="01 Networking"), \
@@ -417,6 +419,63 @@ class P0_3_NoOverwriteTests(VaultTestCase):
         self.assertEqual(self.read("04 Web/dig-usage.md"), other)
         self.assertIn("merged", self.read("08 Tools/dig.md"))
         self.assertEqual(self.md_files(), ["04 Web/dig-usage.md", "08 Tools/dig.md"])
+
+
+class SplitNearDuplicateTests(VaultTestCase):
+    """The --split plan shows the closest indexed note for each entry. It only shows it."""
+
+    ORIGINAL = "# Hashcat\n\nPassword cracker.\n\n## Usage\n\nhashcat -m 0 hash.txt\n"
+    PLAN = [{"title": "Hashcat Rules", "type": "tool", "covers": "rule-based attacks"},
+            {"title": "Whois", "type": "tool", "covers": "domain lookups"}]
+    # Embeddings of "title\ncovers". The hashcat note is [1, 0], so cosine 0.80 and 0.00.
+    VECTORS = {"Hashcat Rules\nrule-based attacks": [4.0, 3.0], "Whois\ndomain lookups": [0.0, 1.0]}
+
+    def setUp(self):
+        super().setUp()
+        self.write("08 Tools/hashcat.md", self.ORIGINAL)
+        config.INDEX_FILE.write_text(json.dumps(
+            {"hashcat": {"vector": [1.0, 0.0], "title": "Hashcat", "category": "08 Tools"}}), encoding="utf-8")
+        llm.embed.side_effect = lambda text: self.VECTORS.get(text, [0.0, 1.0])
+
+    def run_split(self, plan, *answers):
+        with mock.patch.object(sys, "argv", ["kb", "--split", "hashcat rules and whois lookups " * 5]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(main, "propose_split_plan", return_value=plan), \
+             mock.patch.object(brain, "create_note", side_effect=lambda *a, **k: make_note("model title")) as create, \
+             mock.patch.object(brain, "choose_category", return_value="08 Tools"), \
+             mock.patch("builtins.input", side_effect=list(answers)):
+            cli.run()
+        return create, self.out.getvalue()
+
+    def test_plan_shows_the_closest_note_above_the_threshold(self):
+        _, out = self.run_split(list(self.PLAN), "cancel")
+        lines = out.splitlines()
+        self.assertIn("  1. Hashcat Rules  [tool]  ≈ hashcat (0.80, 08 Tools)", lines)
+        self.assertIn("  2. Whois  [tool]", lines)
+        self.assertIn("Shown only: nothing is merged or dropped by itself.", out)
+
+    def test_a_near_duplicate_is_still_created_and_the_old_note_untouched(self):
+        create, _ = self.run_split(list(self.PLAN), "")
+        self.assertEqual(self.md_files(), ["08 Tools/hashcat-rules.md", "08 Tools/hashcat.md", "08 Tools/whois.md"])
+        self.assertEqual(self.read("08 Tools/hashcat.md"), self.ORIGINAL)
+        self.assertEqual(create.call_count, 2)
+
+    def test_drawing_the_plan_again_embeds_nothing_new(self):
+        _, out = self.run_split(list(self.PLAN), "drop 2", "cancel")
+        self.assertEqual(out.count("≈ hashcat (0.80, 08 Tools)"), 2)
+        self.assertEqual(llm.embed.call_count, 2, "one embedding per plan entry, not per redraw")
+
+    def test_an_existing_filename_is_marked_exists_without_an_embedding(self):
+        _, out = self.run_split([{"title": "Hashcat", "type": "tool", "covers": "cracking"}], "cancel")
+        self.assertIn("  1. Hashcat  [tool]  [exists: 08 Tools]", out.splitlines())
+        llm.embed.assert_not_called()
+
+    def test_embedding_failure_stops_before_any_note_is_paid_for(self):
+        llm.embed.side_effect = requests.exceptions.ConnectionError("Ollama is down")
+        create, out = self.run_split(list(self.PLAN))  # no answers: the plan must not be offered
+        self.assertIn("ERROR: embedding failed", out)
+        create.assert_not_called()
+        self.assertEqual(self.md_files(), ["08 Tools/hashcat.md"])
 
 
 # ---------------------------------------------------------------- P1-1
