@@ -4,11 +4,11 @@
 **Vault:** `~/Documents/CyberKB`
 **Tarix:** 2026-10-12 – 2026-10-13
 **Başlanğıc nöqtəsi:** `4deedd0` (iş ağacı təmiz idi, `main` == `origin/main`)
-**Son vəziyyət:** 21 kod, test və sənəd commit-i (2026-10-13-də əlavə edilən P0-3 daxil), üstəgəl bu sənədin və `Explanation.md`-nin öz commit-ləri. Heç biri push edilməyib.
+**Son vəziyyət:** 21 kod, test və sənəd commit-i (2026-10-13-də əlavə edilən P0-3 daxil), üstəgəl sənəd commit-ləri. Heç biri push edilməyib.
 
 Bu sənəd hər bənd üçün dörd suala cavab verir: nə dəyişdi, niyə məhz belə dəyişdi, necə yoxlanıldı və hansı commit-dədir. Sətir nömrələri **hazırkı HEAD**-ə görədir. Terminal çıxışları real işlədilmiş əmrlərdən götürülüb. Bəzi əmrlərin sonunda `grep`/`sed` filtri var, ona görə çıxış həmin filtrlənmiş əmrin dəqiq nəticəsidir.
 
-İlk dəfə işlənən ingilis terminlərinin yanında mötərizədə qısa izah var. Tam lüğət `Explanation.md`-nin J bölməsindədir.
+İlk dəfə işlənən ingilis terminlərinin yanında mötərizədə qısa izah var.
 
 ---
 
@@ -460,7 +460,7 @@ Index matches the vault. Nothing to repair.
 
 **Niyə bu yanaşma.**
 
-- **Açıq siyahı seçildi, `NN ` prefiksi üçün regex yox.** Siyahıda hansı qovluqların olduğu dəqiq görünür. Qiyməti: Obsidian-da yeni qovluq açılsa (məsələn `10 Crypto`), `config.py`-yə əlavə olunana qədər CLI onu görmür. Bu, `Explanation.md`-nin H bölməsində yazılıb.
+- **Açıq siyahı seçildi, `NN ` prefiksi üçün regex yox.** Siyahıda hansı qovluqların olduğu dəqiq görünür. Qiyməti: Obsidian-da yeni qovluq açılsa (məsələn `10 Crypto`), `config.py`-yə əlavə olunana qədər CLI onu görmür. Yeni qovluq `VAULT_CATEGORIES`-ə əlavə olunmalıdır. Classifier də onu seçməlidirsə, `CLASSIFIER_CATEGORIES`-ə və `CATEGORY_SYSTEM` prompt-una da əlavə olunur, `test_prompt_lists_the_same_categories_as_config` isə bu ikisini uyğun saxlayır.
 - **İki ayrı ad, çünki bunlar iki ayrı dəstdir.** Classifier yalnız 10 kateqoriyadan seçir, skan isə 13 qovluğun hamısını qəbul edir.
 - **`CATEGORY_SYSTEM` prompt mətni dəyişmədi.** Mətni sabitdən yaratmaq əvəzinə bir test (`test_prompt_lists_the_same_categories_as_config`) yazdım. O, prompt-dakı siyahının `config` ilə eyni qalmasını yoxlayır.
 
