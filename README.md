@@ -15,7 +15,7 @@ This project solves that by enforcing two principles:
 
 ## Architecture
 
-The system runs across two machines on a local network, with the knowledge base stored locally in Obsidian.
+The system is designed to run across two machines on a local network, with the knowledge base stored locally in Obsidian.
 
 ```text
 ┌──────────────────┐         ┌──────────────────────┐         ┌─────────────────┐
@@ -32,7 +32,7 @@ The engine, the vault and the `kb` command live on the server machine. The HTTP 
 | Component | Role |
 |---|---|
 | Python | Core engine (parsing, orchestration, validation) |
-| DeepSeek V4 (via API, model `deepseek-flash`) | Primary model — 128K context, strong at long technical text |
+| DeepSeek-V4.1-Flash (via API, model `deepseek-flash`) | Primary model — 1M context, up to 384K output tokens, strong at long technical text |
 | Ollama + Qwen 14B (`qwen3:14b`) | Local fallback model for offline use |
 | Ollama + `nomic-embed-text` | Embeddings for finding similar notes — required by every mode except `--delete` |
 | Obsidian | Knowledge base (local, category-organized Markdown) |
@@ -41,7 +41,7 @@ The engine, the vault and the `kb` command live on the server machine. The HTTP 
 
 ## Setup
 
-You need Python 3.11 or newer (developed on 3.14), [Ollama](https://ollama.com), and a DeepSeek API key.
+Developed and tested on Python 3.14. You also need [Ollama](https://ollama.com) and a DeepSeek API key.
 
 **1. Clone and install.** The `kb` launcher runs `cd ~/cke`, so clone to `~/cke` (or edit the script).
 
@@ -103,8 +103,9 @@ Material is sent to the engine from the command line. Depending on the type of s
 Given a block of course material (one or more sections), the engine:
 
 1. Asks the model to propose an atomic split — one note per tool, technique, or concept.
-2. Shows the proposed notes to the user, who can approve, merge, or drop any of them. A title that is already a note in the vault is marked `[exists: <category>]`.
+2. Shows the proposed notes to the user, who can approve, merge, or drop any of them. A title that is already a note in the vault is marked `[exists: <category>]`; otherwise the most similar existing note, if any, is shown next to it (`≈ hashcat (0.83, 08 Tools)`). Nothing is merged or dropped automatically.
 3. Writes each confirmed note as a focused reference page and files it under the correct category. A note that already exists is skipped, never overwritten, and listed at the end.
+4. Prints the API usage of the run: calls, input tokens (cache hit / miss), output tokens and an estimated cost. Every API call is also appended to `usage.log` as one JSON line.
 
 A single reconnaissance module, for example, becomes ~40–50 clean atomic notes (`dig.md`, `gobuster.md`, `subdomain-enumeration.md`, …) instead of one giant unreadable file.
 

@@ -1,6 +1,6 @@
 # CKE: sistem necə işləyir (Explanation.md)
 
-Bu sənəd Cyber Knowledge Engine-in **təmirdən sonrakı** halını təsvir edir (HEAD, 2026-10-13). Məqsəd budur: kodu yenidən oxumadan onun haqqında istənilən suala cavab verə biləsiniz.
+Bu sənəd Cyber Knowledge Engine-in **təmirdən sonrakı** halını təsvir edir (HEAD, 2026-10-16). Məqsəd budur: kodu yenidən oxumadan onun haqqında istənilən suala cavab verə biləsiniz.
 
 Qaydalar:
 
@@ -47,6 +47,7 @@ README-dəki arxitekturaya görə:
 | Index | `~/Documents/CyberKB/.kb_index.json` | Hər qeyd üçün 768 ölçülü vektor, başlıq və kateqoriya (`engine/config.py:6`) |
 | Sirlər | `~/cke/.env` | `DEEPSEEK_API_KEY`; istəyə bağlı `CKE_SERVER_TOKEN`. Git-ə düşmür |
 | Server log-u | `~/cke/server.log` | Ona launchd yazır. Git-ə düşmür |
+| API xərci | `~/cke/usage.log` | Hər DeepSeek çağırışı üçün bir JSON sətri: token sayları və `finish_reason` (`engine/config.py:45`). Git-ə düşmür |
 | Tənzimləmələr | `engine/config.py` | Bütün yollar, modellər, hədlər, timeout-lar (iki istisna C bölməsindədir) |
 
 Vault üç yolla sinxronlaşdırılır:
@@ -60,7 +61,7 @@ Engine sinxronizasiya ilə məşğul olmur. Amma bunun bir nəticəsi var: `.kb_
 
 | Model | Harada | Nə üçün |
 |---|---|---|
-| `deepseek-flash` | DeepSeek API (`https://api.deepseek.com`) | Defolt chat modeli (`DEFAULT_BACKEND = "api"`) |
+| `deepseek-flash` | DeepSeek API (`https://api.deepseek.com`) | Defolt chat modeli (`DEFAULT_BACKEND = "api"`). DeepSeek-V4.1-Flash: kontekst 1M token, maksimum çıxış 384K token. Thinking söndürülüb (F.5) |
 | `qwen3:14b` | Lokal Ollama | `--local` ilə chat modeli |
 | `nomic-embed-text` | Lokal Ollama | Embedding. `--delete`-dən başqa **hər rejimdə** lazımdır |
 
@@ -82,42 +83,42 @@ Hər iz eyni qaydada yazılıb:
 1. **Shell.** `kb` alias-ı `~/cke/kb`-yə yönəlir (`~/.zshrc:124`). Bu 4 sətirlik skript `cd ~/cke` edir, `venv`-i aktivləşdirir və `python3 -m engine.cli "$@"` işə salır.
 2. **Import zənciri.** `engine/cli.py:6-7` `engine.main`-i import edir. `engine/main.py:1` `config`, `memory`, `vault`, `brain`-i import edir. Bu zəncirdə üç vacib iş baş verir:
    - `engine/config.py:5` işləyir: `VAULT` ya `CKE_VAULT` mühit dəyişənindən, ya da defolt yoldan götürülür.
-   - `engine/memory.py:2` `llm`-i import edir. `engine/llm.py:10` `.env` faylını yükləyir.
+   - `engine/memory.py:2` `llm`-i import edir. `engine/llm.py:11` `.env` faylını yükləyir.
    - Bu sıranın nəticəsi: `config` `.env`-dən **əvvəl** hesablanır, ona görə `CKE_VAULT` `.env`-dən oxunmur.
-3. **`cli.run()`** (`engine/cli.py:268`): `args = sys.argv[1:]`.
-4. `--delete` varsa, dərhal `handle_delete()` çağırılır (`engine/cli.py:271-273`). Ollama yoxlanmır. İz B.5-dədir.
-5. **Ollama yoxlaması** (`engine/cli.py:277`, `require_ollama`):
+3. **`cli.run()`** (`engine/cli.py:299`): `args = sys.argv[1:]`.
+4. `--delete` varsa, dərhal `handle_delete()` çağırılır (`engine/cli.py:302-304`). Ollama yoxlanmır. İz B.5-dədir.
+5. **Ollama yoxlaması** (`engine/cli.py:308`, `require_ollama`):
    - `check_ollama()` (`engine/cli.py:16-25`) `GET http://localhost:11434/api/tags` göndərir (timeout 5 saniyə).
    - HTTP 200 tələb edir.
    - Model adlarını `with_tag()` ilə normallaşdırır: tag-sız ada `:latest` əlavə olunur.
    - `config.EMBED_MODEL`-in siyahıda olub-olmadığını yoxlayır.
    - **[XƏTA]** Ollama sönülüdürsə və ya model yoxdursa: `ERROR: Ollama is not reachable ...` çap olunur və `sys.exit(1)`. Bu, heç bir LLM çağırışından və heç bir yazmadan əvvəl baş verir.
-6. `--reindex` varsa, `handle_reindex()` çağırılır (`engine/cli.py:279-281`). İz B.7-dədir.
-7. **Backend seçimi** (`engine/cli.py:283-286`): `backend = config.DEFAULT_BACKEND` (`"api"`). `--local` varsa, `backend = "local"` olur və flag siyahıdan silinir.
+6. `--reindex` varsa, `handle_reindex()` çağırılır (`engine/cli.py:310-312`). İz B.7-dədir.
+7. **Backend seçimi** (`engine/cli.py:314-317`): `backend = config.DEFAULT_BACKEND` (`"api"`). `--local` varsa, `backend = "local"` olur və flag siyahıdan silinir.
 
 ### B.1. `kb` (yeni qeyd yaratmaq)
 
-1. `--split` və `--writeup` yoxdur. `do_merge = False` (`engine/cli.py:317`).
-2. **Giriş mətni** (`engine/cli.py:322`, `get_input_text`, `engine/cli.py:55-70`):
+1. `--split` və `--writeup` yoxdur. `do_merge = False` (`engine/cli.py:355`).
+2. **Giriş mətni** (`engine/cli.py:360`, `get_input_text`, `engine/cli.py:55-70`):
    - `args[0] == "--file"` olarsa, fayl oxunur;
    - başqa arqumentlər varsa, onlar boşluqla birləşdirilir;
    - heç nə yoxdursa, "Paste your note text below" çap olunur və `sys.stdin.read()` Ctrl+D-yə qədər oxuyur.
    - **Forma:** xam `str`, sonra `.strip()`.
-   - **[XƏTA]** Mətn 30 simvoldan qısadırsa: `Input too short` çap olunur və `sys.exit(1)` (`engine/cli.py:323-325`).
-3. Spinner başlayır, sonra `process(text, backend)` çağırılır (`engine/cli.py:375-378`).
+   - **[XƏTA]** Mətn 30 simvoldan qısadırsa: `Input too short` çap olunur və `sys.exit(1)` (`engine/cli.py:361-363`).
+3. Spinner başlayır, sonra `process(text, backend)` çağırılır (`engine/cli.py:413-416`).
 4. **`main.process`** (`engine/main.py:12-26`):
    1. `brain.create_note(text)` (`engine/main.py:14`) → `generate_validated(CREATE_SYSTEM, text)` (`engine/brain.py:127-128`, `112-124`):
-      - **[LLM]** `llm.ask_json` (`engine/brain.py:119`) → `_ask_json_api` (`engine/llm.py:56-70`). DeepSeek-ə system və user mesajı gedir: `temperature=0.2`, `top_p=0.95`, `max_tokens=32768`.
-      - **Forma:** cavab xam mətndir. `_extract_json` (`engine/llm.py:73-78`) birinci `{` ilə sonuncu `}` arasını kəsib `json.loads` edir və nəticə `dict` olur. Sonra `Note.model_validate(raw)` (`engine/brain.py:120`) onu `Note` obyektinə çevirir.
+      - **[LLM]** `llm.ask_json` (`engine/brain.py:119`) → `_ask_json_api` (`engine/llm.py:64-86`). DeepSeek-ə system və user mesajı gedir: `temperature=0.2`, `max_tokens=32768`, thinking rejimi söndürülüb (F.5). Hər çağırışın token sayı `usage.log`-a yazılır (`record_usage`, `engine/llm.py:89-105`).
+      - **Forma:** cavab xam mətndir. `_extract_json` (`engine/llm.py:119-124`) birinci `{` ilə sonuncu `}` arasını kəsib `json.loads` edir və nəticə `dict` olur. Sonra `Note.model_validate(raw)` (`engine/brain.py:120`) onu `Note` obyektinə çevirir.
       - **[XƏTA]** `ValidationError`, `ValueError` və ya `JSONDecodeError` olarsa: səhv mesajı prompt-a əlavə olunur və yenidən soruşulur. Ümumilikdə `MAX_RETRIES + 1 = 3` cəhd edilir. Üçü də uğursuz olsa, `RuntimeError` qaldırılır (`engine/brain.py:124`).
-      - **[XƏTA]** `DEEPSEEK_API_KEY` yoxdursa, `RuntimeError` qaldırılır (`engine/llm.py:20`). Şəbəkə və ya auth xətaları (`openai`-nin exception-ları) da retry olunmur, çünki `generate_validated` yalnız yuxarıdakı üç növü tutur. Hər iki halda `cli` `ERROR: ...` çap edir və `exit(1)` edir.
+      - **[XƏTA]** `DEEPSEEK_API_KEY` yoxdursa, `RuntimeError` qaldırılır (`engine/llm.py:28`). Şəbəkə və ya auth xətaları (`openai`-nin exception-ları) da retry olunmur, çünki `generate_validated` yalnız yuxarıdakı üç növü tutur. Cavab `max_tokens`-a çatıb kəsilibsə (`finish_reason == "length"`), `OutputTruncatedError` qalxır (`engine/llm.py:80-84`). O, `RuntimeError`-dur, ona görə də retry olunmur: kəsilmiş JSON-u təkrar soruşmaq eyni pula başa gəlir və yenə kəsilir. Bütün bu hallarda `cli` `ERROR: ...` çap edir və `exit(1)` edir.
    2. `slug = vault.slugify(note.title)` (`engine/main.py:15`, `engine/vault.py:79-94`). Nəticə həmişə boş olmayan `str`-dir. Sonra `vault.ensure_new(slug)` (`engine/main.py:17`, `engine/vault.py:52-56`) bu slug-ın hər hansı kateqoriyada olub-olmadığını yoxlayır.
-      - **[XƏTA]** Slug artıq varsa, `NoteExistsError` qalxır, kateqoriya çağırışı edilmir və **heç nə yazılmır**. `cli` `STOPPED: a note with this filename already exists. Nothing was written.` çap edir. Sonra mövcud qeydin başlığını (fayldan oxunur), kateqoriyasını və yolunu göstərir, `kb --merge` təklif edir və `exit(1)` edir (`engine/cli.py:382-385`, `report_existing`: `44-52`).
+      - **[XƏTA]** Slug artıq varsa, `NoteExistsError` qalxır, kateqoriya çağırışı edilmir və **heç nə yazılmır**. `cli` `STOPPED: a note with this filename already exists. Nothing was written.` çap edir. Sonra mövcud qeydin başlığını (fayldan oxunur), kateqoriyasını və yolunu göstərir, `kb --merge` təklif edir və `exit(1)` edir (`engine/cli.py:420-423`, `report_existing`: `44-52`).
    3. `brain.choose_category(title, summary)` (`engine/main.py:20`, `engine/brain.py:156-165`):
       - **[LLM]** `CATEGORY_SYSTEM` ilə ikinci çağırış.
       - Cavab `config.CLASSIFIER_CATEGORIES`-də deyilsə, və ya hər hansı xəta olsa, `"00 Inbox"` qaytarılır. Bu funksiya **heç vaxt** exception qaldırmır.
    4. `save_note(slug, category, note)` (`engine/main.py:23`, `4-9`). Üç addım bu sıra ilə gedir:
-      1. **[EMB]** `memory.embed_entry` (`engine/memory.py:24-30`) → `llm.embed` (`engine/llm.py:25-33`): `POST /api/embeddings`, mətn `"{title}\n{summary}"`-dir, ilk 6000 simvola qədər kəsilir, timeout 60 saniyədir. **Forma:** `{"vector": [768 float], "title": ..., "category": ...}`. **[XƏTA]** Ollama düşübsə, `requests` exception-u qalxır və **heç nə yazılmır**.
+      1. **[EMB]** `memory.embed_entry` (`engine/memory.py:24-30`) → `llm.embed` (`engine/llm.py:33-41`): `POST /api/embeddings`, mətn `"{title}\n{summary}"`-dir, ilk 6000 simvola qədər kəsilir, timeout 60 saniyədir. **Forma:** `{"vector": [768 float], "title": ..., "category": ...}`. **[XƏTA]** Ollama düşübsə, `requests` exception-u qalxır və **heç nə yazılmır**.
       2. **[VAULT]** `vault.write_note` (`engine/vault.py:59-70`):
          - `find_note(slug)` köhnə yeri tapır. Slug iki kateqoriyada varsa, `RuntimeError` qaldırır.
          - Slug artıq varsa və `replace=False`-dursa, `NoteExistsError` qalxır. Merge-dən başqa bütün yollarda `replace=False`-dur. `process` bunu 2-ci addımda yoxlayıb, bu isə son qorumadır.
@@ -131,55 +132,61 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.2. `kb --split` (modulu atomik qeydlərə bölmək)
 
-1. `--split` siyahıdan silinir. `split_text = get_input_text(args)` oxunur, sonra `handle_split(backend, split_text)` çağırılır (`engine/cli.py:288-292`).
-2. **`handle_split`** (`engine/cli.py:100-199`): mətn `.strip()` edilir. **[XƏTA]** 100 simvoldan qısadırsa: `Input too short ... for splitting` çap olunur və funksiya qayıdır. Burada `exit(1)` olmur.
-3. **Plan** (`engine/cli.py:115`): `propose_split_plan` (`engine/main.py:137-138`) → `brain.propose_split` (`engine/brain.py:203-206`):
+1. `--split` siyahıdan silinir. `split_text = get_input_text(args)` oxunur, sonra `handle_split(backend, split_text)` çağırılır (`engine/cli.py:319-330`). Bu çağırış `try/finally` içindədir, ona görə API xərcinin cəmi split necə bitirsə bitsin çap olunur (addım 8).
+2. **`handle_split`** (`engine/cli.py:112-230`): mətn `.strip()` edilir. **[XƏTA]** 100 simvoldan qısadırsa: `Input too short ... for splitting` çap olunur və funksiya qayıdır. Burada `exit(1)` olmur.
+3. **Plan** (`engine/cli.py:127`): `propose_split_plan` (`engine/main.py:137-138`) → `brain.propose_split` (`engine/brain.py:203-206`):
    - **[LLM]** `generate_validated(SPLIT_SYSTEM, text, schema=SplitPlan)`. Retry yolu notlarla eynidir.
    - **Forma:** `dict` → `SplitPlan` obyekti → `[entry.model_dump() ...]`, yəni `{"title", "type", "covers", "source_hint"}` dict-lərindən ibarət siyahı.
    - **[XƏTA]** Plan son cəhddən sonra da yararsızdırsa: `ERROR during planning: ...` çap olunur və funksiya qayıdır. Heç nə yazılmır.
-4. Plan boşdursa, `No notes proposed. Nothing saved.` çap olunur (`engine/cli.py:122-124`).
-5. **İnsanın təsdiqi** (`engine/cli.py:126-172`). Plan nömrələnmiş şəkildə göstərilir. Hər dəfə plan göstəriləndə `main.notes_on_disk()` (`engine/main.py:82-90`) vault-u bir dəfə skan edir. Elementin başlığından alınan slug artıq diskdədirsə, sətrin sonuna `[exists: <kateqoriya>]` əlavə olunur, siyahının altında isə belə elementin keçiləcəyi izah edilir (`engine/cli.py:127-137`). Onu `drop` ilə atmaq olar. Seçimlər:
+4. Plan boşdursa, `No notes proposed. Nothing saved.` çap olunur (`engine/cli.py:134-136`).
+5. **İnsanın təsdiqi** (`engine/cli.py:139-203`). Plan nömrələnmiş şəkildə göstərilir. Hər dəfə plan göstəriləndə `main.notes_on_disk()` (`engine/main.py:82-90`) vault-u bir dəfə skan edir. Elementin başlığından alınan slug artıq diskdədirsə, sətrin sonuna `[exists: <kateqoriya>]` əlavə olunur, siyahının altında isə belə elementin keçiləcəyi izah edilir (`engine/cli.py:141`, `157-165`). Onu `drop` ilə atmaq olar.
+   - **Yaxın dublikat işarəsi** (`engine/cli.py:142-155`, `160`, `166-168`; `nearest_note`: `100-109`). **[EMB]** `[exists]` olmayan hər element üçün `"<title>\n<covers>"` mətni embed edilir və `memory.find_top_matches(limit=1)` index-də ən yaxın qeydi axtarır. Oxşarlıq `CANDIDATE_THRESHOLD` (0.60) və ya daha yüksəkdirsə, sətrin sonuna `≈ <slug> (<skor>, <kateqoriya>)` əlavə olunur, məsələn `12. Hashcat Rules  [tool]  ≈ hashcat (0.83, 08 Tools)`. Bu, **yalnız göstərişdir**: heç nə avtomatik birləşdirilmir və ya atılmır. Qərarı istifadəçi `drop` ilə verir.
+   - `[exists]` olan element embed edilmir, çünki onsuz da keçiləcək. Nəticə `(title, covers)` açarı ilə yadda saxlanır, ona görə `drop`/`merge`-dən sonra plan yenidən göstəriləndə yalnız yeni element embed olunur.
+   - **[XƏTA]** Embedding uğursuz olsa, `ERROR: embedding failed while checking for similar notes` çap olunur və funksiya qayıdır. Heç nə yazılmır: qeydi saxlamaq üçün də embedding lazımdır, davam etmək yalnız uğursuz olacaq qeydlərin API çağırışlarına pul ödəmək olardı.
+
+   Seçimlər:
    - Enter: hamısını yarat;
    - `cancel`: dayandır;
    - `merge 2 3`: seçilənlər birləşir. Başlıq birinci seçilənin başlığı olur, `type` həmişə `"technique"` olur, `covers` və `source_hint` birləşdirilir. Yeni element siyahının əvvəlinə qoyulur;
    - `drop 4`: elementi at.
-6. **Hər plan elementi üçün** (`engine/cli.py:178-193`): `process_from_plan(text, entry, backend)` çağırılır (`engine/main.py:140-164`):
-   1. `slug = slugify(note_plan["title"])` və `ensure_new(slug)` (`engine/main.py:148-149`). Bu yoxlama **heç bir model çağırışından əvvəl** olur. **[XƏTA]** Slug artıq varsa, `NoteExistsError` qalxır. `handle_split` onu tutur, `skipped (already exists): <kateqoriya>/<slug>.md` çap edir və növbəti elementə keçir (`engine/cli.py:186-190`). Mövcud qeydə toxunulmur və model çağırılmır. Eyni plandakı iki başlıq eyni slug verirsə (`Whois` və `whois`), birincisi yazılır, ikincisi keçilir.
+6. **Hər plan elementi üçün** (`engine/cli.py:209-224`): `process_from_plan(text, entry, backend)` çağırılır (`engine/main.py:140-164`):
+   1. `slug = slugify(note_plan["title"])` və `ensure_new(slug)` (`engine/main.py:148-149`). Bu yoxlama **heç bir model çağırışından əvvəl** olur. **[XƏTA]** Slug artıq varsa, `NoteExistsError` qalxır. `handle_split` onu tutur, `skipped (already exists): <kateqoriya>/<slug>.md` çap edir və növbəti elementə keçir (`engine/cli.py:217-221`). Mövcud qeydə toxunulmur və model çağırılmır. Eyni plandakı iki başlıq eyni slug verirsə (`Whois` və `whois`), birincisi yazılır, ikincisi keçilir.
    2. `focus_prompt` qurulur (`engine/main.py:150-158`). Bu, **bütün** mənbə mətni və əlavə göstərişlərdir: "yalnız bu başlığa fokuslan", `covers`, `source_hint`.
    3. **[LLM]** `brain.create_note(focus_prompt)`.
    4. `note.title = note_plan["title"]` (`engine/main.py:161`). Başlıq olaraq modelin yaratdığı yox, istifadəçinin təsdiqlədiyi qısa başlıq götürülür. Pydantic təyin etməni (assignment) yenidən yoxlamır, amma bu başlıq artıq `PlanEntry`-də yoxlanıb.
    5. **[LLM]** `choose_category`, sonra **[EMB]** + **[VAULT]** `save_note`. Slug 1-ci addımda hesablanıb.
    6. **[XƏTA]** Bir qeyddə başqa xəta olarsa, `ERROR on '<title>'` çap olunur və **növbəti qeydə keçilir**. Artıq yaradılmış qeydlər qalır.
-7. Sonda `Done. Created N note(s).` çap olunur. Keçilən element varsa, `Skipped M existing note(s), not overwritten:` və hər birinin yolu çap olunur (`engine/cli.py:194-199`).
+7. Sonda `Done. Created N note(s).` çap olunur. Keçilən element varsa, `Skipped M existing note(s), not overwritten:` və hər birinin yolu çap olunur (`engine/cli.py:225-230`).
+8. **API xərcinin cəmi** (`engine/cli.py:322-329`). Bu split-in etdiyi API çağırışları (`llm.usage_records`-in split başlayandan sonrakı hissəsi) bir sətirdə çap olunur: `API usage: N calls, X hit / Y miss, Z output, ~$cost` (`llm.usage_summary`, `engine/llm.py:108-116`). `cancel`-dan və ya xətadan sonra da çap olunur, çünki plan çağırışının pulu artıq ödənib. `--local`-da API çağırışı olmadığı üçün bu sətir çıxmır.
 
-**Xülasə:** N qeyd üçün `1 + 2N` LLM çağırışı (retry-lər bura daxil deyil). Keçilən qeyd model çağırmır. Mənbə mətnin hamısı hər qeyd üçün yenidən göndərilir, ona görə xərc təxminən `N × mətnin uzunluğu` qədərdir (I bölməsi, gələcək iş 3).
+**Xülasə:** N qeyd üçün `1 + 2N` LLM çağırışı (retry-lər bura daxil deyil) və ən çox `2N` embedding (plandakı işarə üçün N, saxlamaq üçün N). Keçilən qeyd model çağırmır. Mənbə mətnin hamısı hər qeyd üçün yenidən göndərilir, ona görə input token sayı təxminən `N × mətnin uzunluğu` qədərdir. Bunun nə qədərinin ucuz cache hit olduğunu `API usage` sətri göstərir (I bölməsi, gələcək iş 3).
 
 ### B.3. `kb --writeup` (maşın həllini writeup-a çevirmək)
 
-1. `--writeup` siyahıdan silinir, mətn oxunur və `.strip()` edilir (`engine/cli.py:294-297`). **[XƏTA]** 100 simvoldan qısadırsa, funksiya qayıdır (`engine/cli.py:298-300`).
+1. `--writeup` siyahıdan silinir, mətn oxunur və `.strip()` edilir (`engine/cli.py:332-335`). **[XƏTA]** 100 simvoldan qısadırsa, funksiya qayıdır (`engine/cli.py:336-338`).
 2. Spinner başlayır, sonra `process_writeup(text, backend)` çağırılır (`engine/main.py:166-173`):
    1. **[LLM]** `brain.create_writeup` (`engine/brain.py:247-248`) → `generate_validated(WRITEUP_SYSTEM, text)` → `Note`.
    2. `category = "90 Writeups"`. Bu, sabit dəyərdir, classifier çağırılmır.
    3. `slugify`, sonra **[EMB]** + **[VAULT]** `save_note`. Bu adda writeup artıq varsa, `write_note` `NoteExistsError` qaldırır və heç nə yazılmır (P0-3). Başlıq yalnız modelin cavabından sonra bəlli olur, ona görə API çağırışı artıq edilmiş olur. `--merge` təklif olunmur, çünki merge writeup-u ensiklopediya prompt-u ilə yenidən yazardı.
-3. **[XƏTA]** İstənilən exception-da `ERROR: ...` çap olunur və `exit(1)` (`engine/cli.py:311-314`).
+3. **[XƏTA]** İstənilən exception-da `ERROR: ...` çap olunur və `exit(1)` (`engine/cli.py:349-352`).
 
 **Xülasə:** 1 LLM çağırışı (retry ilə ən çox 3), 1 embedding, 2 disk yazısı.
 
 ### B.4. `kb --merge` (yeni məlumatı mövcud qeydə birləşdirmək)
 
-1. `do_merge = True` olur, flag siyahıdan silinir (`engine/cli.py:317-320`). Mətn B.1-dəki kimi oxunur. **[XƏTA]** 30 simvoldan qısadırsa, `exit(1)`.
-2. **Oxşar qeydlərin axtarışı** (`engine/cli.py:331-335`): `find_merge_candidates(text)` (`engine/main.py:29-30`) → `memory.find_top_matches(text, limit=5)` (`engine/memory.py:45-56`):
+1. `do_merge = True` olur, flag siyahıdan silinir (`engine/cli.py:355-358`). Mətn B.1-dəki kimi oxunur. **[XƏTA]** 30 simvoldan qısadırsa, `exit(1)`.
+2. **Oxşar qeydlərin axtarışı** (`engine/cli.py:369-373`): `find_merge_candidates(text)` (`engine/main.py:29-30`) → `memory.find_top_matches(text, limit=5)` (`engine/memory.py:45-56`):
    1. `load_index()`. Index boşdursa, `[]` qaytarılır.
    2. **[EMB]** `llm.embed(text)`: yeni mətnin vektoru (ilk 6000 simvol).
    3. Index-dəki **hər** yazı ilə cosine similarity (iki vektorun istiqamət oxşarlığı) hesablanır (`engine/memory.py:15-21`).
    4. Nəticələr azalan sıra ilə düzülür, `>= CANDIDATE_THRESHOLD` (0.60) olanlar saxlanır, ən çox 5-i götürülür.
    - **Forma:** `[(slug, title, category, score), ...]`.
 3. Namizəd yoxdursa: `No sufficiently similar notes found. Creating a new note instead.` çap olunur, `do_merge = False` olur və axın **B.1-ə** keçir (adi qeyd yaradılır).
-4. Namizədlər göstərilir və `input()` ilə seçim alınır (`engine/cli.py:341-345`):
+4. Namizədlər göstərilir və `input()` ilə seçim alınır (`engine/cli.py:379-383`):
    - `0` və ya rəqəm olmayan cavab: yeni qeyd yaradılır (B.1);
    - aralıqdan kənar rəqəm: `Invalid choice` və `exit(1)`;
    - düzgün seçim: `target_slug` götürülür.
-5. Spinner başlayır və `ask_rename` funksiyası qurulur (`engine/cli.py:357-359`). Bu funksiya əvvəl spinner-i dayandırır, sonra `confirm_rename`-i çağırır.
+5. Spinner başlayır və `ask_rename` funksiyası qurulur (`engine/cli.py:395-397`). Bu funksiya əvvəl spinner-i dayandırır, sonra `confirm_rename`-i çağırır.
 6. **`merge_into(text, target_slug, backend, confirm_rename=ask_rename)`** (`engine/main.py:33-71`):
    1. `vault.read_note(target_slug)` (`engine/vault.py:45-49`). **[XƏTA]** Fayl yoxdursa, `RuntimeError: Note '...' not found`. Bu, index-də ghost yazı olanda baş verir və `kb --reindex` bunu təmizləyir. Slug dublikatdırsa, `find_note` `RuntimeError` qaldırır.
    2. `vault.markdown_to_json(existing_md)` (`engine/vault.py:107-139`). **Forma:** `{"title", "summary", "sections": [{"heading", "content"}]}`. Fence-lərin içi məzmundur, başlığı yalnız birinci `# ` sətri təyin edir.
@@ -200,8 +207,8 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.5. `kb --delete` (qeydi silmək)
 
-1. `--delete` **ilk** yoxlanılan flag-dır (`engine/cli.py:271-273`). Ona görə Ollama yoxlanmır və başqa flag-lar nəzərə alınmır.
-2. **`handle_delete`** (`engine/cli.py:201-233`):
+1. `--delete` **ilk** yoxlanılan flag-dır (`engine/cli.py:302-304`). Ona görə Ollama yoxlanmır və başqa flag-lar nəzərə alınmır.
+2. **`handle_delete`** (`engine/cli.py:232-264`):
    1. `list_all_notes()` (`engine/main.py:73-79`). Yalnız `config.VAULT_CATEGORIES`-də olan mövcud qovluqlar gəzilir (`vault.category_dirs()`), qovluqlar `config` sırası ilə, fayllar isə əlifba sırası ilə. **Forma:** `[(slug, category), ...]`. `Claude outputs/` kimi qovluqlar görünmür.
    2. Nömrələnmiş siyahı göstərilir və `input()` ilə seçim alınır. `0` və ya yararsız cavab: `Cancelled`.
    3. `Delete '<slug>'? ... (yes/no)` soruşulur. Yalnız `yes` cavabı silir.
@@ -213,9 +220,9 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.6. `kb --local` (lokal model ilə)
 
-`--local` ayrıca rejim deyil, **modifikator**dur. O, `backend = "local"` təyin edir (`engine/cli.py:284-286`) və yuxarıdakı istənilən rejimlə birlikdə işləyir: `kb --local`, `kb --split --local` və s. Fərq yalnız `llm.ask_json`-dadır (`engine/llm.py:81-86`):
+`--local` ayrıca rejim deyil, **modifikator**dur. O, `backend = "local"` təyin edir (`engine/cli.py:315-317`) və yuxarıdakı istənilən rejimlə birlikdə işləyir: `kb --local`, `kb --split --local` və s. Fərq yalnız `llm.ask_json`-dadır (`engine/llm.py:127-132`):
 
-1. `_ask_json_local` (`engine/llm.py:36-53`): `POST http://localhost:11434/api/generate`. Göndərilənlər:
+1. `_ask_json_local` (`engine/llm.py:44-61`): `POST http://localhost:11434/api/generate`. Göndərilənlər:
    - `model = qwen3:14b`, `system`, `prompt`, `stream: false`;
    - `options`: `temperature 0.2`, `num_ctx 8192`.
 2. Timeout `config.REQUEST_TIMEOUT = 2400` saniyədir (40 dəqiqə). Bu, **hər bir HTTP sorğusu üçündür**, bütün iş üçün deyil. Məsələn, `--split` ilə 10 qeyd `1 + 2×10 = 21` sorğu deməkdir və hər biri ayrıca 40 dəqiqəyə qədər gözləyə bilər.
@@ -225,7 +232,7 @@ Hər iz eyni qaydada yazılıb:
 
 ### B.7. `kb --reindex` (texniki baxım; altı rejimə əlavə olaraq)
 
-1. Ollama yoxlamasından sonra `handle_reindex()` çağırılır (`engine/cli.py:279-281`, `236-265`).
+1. Ollama yoxlamasından sonra `handle_reindex()` çağırılır (`engine/cli.py:310-312`, `267-296`).
 2. `find_index_drift()` (`engine/main.py:93-110`) yalnız oxuyur:
    - `list_all_notes()` ilə diskin xəritəsini qurur: `{slug: [kateqoriyalar]}`;
    - index ilə müqayisə edir və dörd siyahı qaytarır: `missing_file`, `wrong_category`, `not_indexed`, `duplicate`.
@@ -262,16 +269,19 @@ Hər iz eyni qaydada yazılıb:
 | `DEFAULT_BACKEND` | 32 | `"api"` | `cli.run`, `llm.ask_json` (`backend=None` olanda) |
 | `SERVER_HOST` / `SERVER_PORT` | 37-38 | `127.0.0.1` / `8000` | `server.py` |
 | `API_BASE_URL` / `API_MODEL` / `API_TIMEOUT` | 41-43 | DeepSeek / `deepseek-flash` / `600` s | `llm.get_api_client`, `llm._ask_json_api` |
+| `USAGE_LOG` | 45 | `~/cke/usage.log` (gitignore-dadır) | `llm.record_usage` |
+| `PRICE_CACHE_HIT` / `PRICE_CACHE_MISS` / `PRICE_OUTPUT` | 48-50 | `0.003` / `0.15` / `0.6` $ (1M token üçün, `deepseek-flash`, off-peak) | `llm.usage_summary` |
 
 **Diqqət ediləcək cəhətlər:**
 
 - `CKE_VAULT` boşdursa, defolt yol götürülür (`or`). Dırnaq içində `~` yazılsa da açılır (`expanduser`). `.env`-dən oxunmur (B.0, addım 2).
 - "Bütün tənzimləmələr config-dədir" qaydasının **istisnaları:**
-  - `llm.embed`-in timeout-u `60` saniyədir (`engine/llm.py:30`);
+  - `llm.embed`-in timeout-u `60` saniyədir (`engine/llm.py:38`);
   - `cli.check_ollama`-nın timeout-u `5` saniyədir (`engine/cli.py:19`);
-  - `temperature 0.2`, `top_p 0.95`, `max_tokens 32768` dəyərləri `llm.py`-də birbaşa yazılıb.
+  - `temperature 0.2`, `max_tokens 32768` və thinking-in söndürülməsi `llm.py`-də birbaşa yazılıb.
 
-  Bunlar təmirdən əvvəl də belə idi və dəyişdirilmədi.
+  Timeout-lar, `temperature` və `max_tokens` təmirdən əvvəl də belə idi və dəyişdirilmədi. Thinking 2026-10-16-da söndürüldü və `top_p` həmin gün silindi (F.5).
+- Qiymətlər **off-peak** qiymətləridir. DeepSeek-in peak saatlarında (01:00-04:00 və 06:00-10:00 UTC, bazar ertəsi-cümə) qiymət iki dəfə yüksəkdir, ona görə `~$cost` həmin saatlarda real xərcin yarısını göstərir.
 
 ### C.2. `engine/schema.py`: modelin cavabının forması
 
@@ -366,19 +376,24 @@ Hər iz eyni qaydada yazılıb:
 
 | Funksiya / ad | Sətir | Qaytarır | Kim çağırır |
 |---|---|---|---|
-| `PROJECT_ROOT`, `load_dotenv(...)` | 9-10 | Import zamanı `~/cke/.env` yüklənir | — |
-| `get_api_client()` | 15-22 | `OpenAI` client-i. Tək nüsxədir (singleton), ilk çağırışda yaradılır. Açar yoxdursa `RuntimeError` | `_ask_json_api` |
-| `embed(text)` | 25-33 | 768 `float`. Mətn 6000 simvola qədər kəsilir, timeout 60 s | `memory.embed_entry`, `memory.find_top_matches` |
-| `_ask_json_local(system, prompt)` | 36-53 | `dict`. Ollama `/api/generate` | `ask_json` |
-| `_ask_json_api(system, prompt)` | 56-70 | `dict`. DeepSeek chat completions | `ask_json` |
-| `_extract_json(raw)` | 73-78 | `dict`. Birinci `{` ilə sonuncu `}` arasını kəsir və `json.loads` edir | `_ask_json_local`, `_ask_json_api` |
-| `ask_json(system, prompt, backend=None)` | 81-86 | `dict`. `backend=None` olanda `config.DEFAULT_BACKEND` götürülür | `brain.generate_validated`, `brain.choose_category` |
+| `PROJECT_ROOT`, `load_dotenv(...)` | 10-11 | Import zamanı `~/cke/.env` yüklənir | — |
+| `usage_records` | 16 | Bu prosesin bütün API çağırışlarının siyahısı, köhnədən yeniyə | `record_usage` yazır, `cli.run` (`--split`) oxuyur |
+| `OutputTruncatedError` | 19-20 | `RuntimeError`. Cavab `max_tokens`-da kəsiləndə qalxır | `_ask_json_api` |
+| `get_api_client()` | 23-30 | `OpenAI` client-i. Tək nüsxədir (singleton), ilk çağırışda yaradılır. Açar yoxdursa `RuntimeError` | `_ask_json_api` |
+| `embed(text)` | 33-41 | 768 `float`. Mətn 6000 simvola qədər kəsilir, timeout 60 s | `memory.embed_entry`, `memory.find_top_matches` |
+| `_ask_json_local(system, prompt)` | 44-61 | `dict`. Ollama `/api/generate` | `ask_json` |
+| `_ask_json_api(system, prompt)` | 64-86 | `dict`. DeepSeek chat completions, thinking söndürülüb. `finish_reason == "length"` olanda `OutputTruncatedError` | `ask_json` |
+| `record_usage(completion)` | 89-105 | Bir çağırışın qeydi (`dict`): vaxt, model, `prompt_cache_hit_tokens`, `prompt_cache_miss_tokens`, `completion_tokens`, `finish_reason`. `usage_records`-ə və `config.USAGE_LOG`-a bir JSON sətri kimi yazılır | `_ask_json_api` |
+| `usage_summary(records)` | 108-116 | `str`: `"N calls, X hit / Y miss, Z output, ~$cost"`, `config.PRICE_*` ilə | `cli.run` (`--split`) |
+| `_extract_json(raw)` | 119-124 | `dict`. Birinci `{` ilə sonuncu `}` arasını kəsir və `json.loads` edir | `_ask_json_local`, `_ask_json_api` |
+| `ask_json(system, prompt, backend=None)` | 127-132 | `dict`. `backend=None` olanda `config.DEFAULT_BACKEND` götürülür | `brain.generate_validated`, `brain.choose_category` |
 
 **Diqqət ediləcək cəhətlər:**
 
 - DeepSeek API OpenAI ilə uyğundur, ona görə `openai` paketi `base_url=https://api.deepseek.com` ilə işlədilir.
 - `_extract_json` modelin JSON-dan əvvəl və ya sonra yazdığı adi mətni atır. Amma həmin mətndə özündə `{` və ya `}` varsa, kəsilən hissə JSON olmur və `json.loads` uğursuz olur. Bu zaman `brain`-dəki retry işə düşür. F bölməsində ətraflı izah var.
 - Server `process(text)`-i `backend=None` ilə çağırır. Server-in hansı modeldən istifadə etdiyi buradakı defolt qoldan asılıdır.
+- Hər API çağırışı, uğurlu olub-olmamasından asılı olmayaraq, cavab gələn kimi `usage.log`-a yazılır: kəsilmiş cavabın da pulu ödənib. Lokal backend qeyd olunmur. Şəbəkə xətasında cavab yoxdur, ona görə qeyd də yoxdur.
 
 ### C.6. `engine/brain.py`: prompt-lar və validation döngüsü
 
@@ -397,7 +412,7 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 
 **Diqqət ediləcək cəhətlər:**
 
-- `generate_validated` yalnız `ValidationError`, `ValueError` və `json.JSONDecodeError`-u tutub retry edir. Şəbəkə, auth və `RuntimeError` (məsələn açar yoxdursa) dərhal yuxarı ötürülür.
+- `generate_validated` yalnız `ValidationError`, `ValueError` və `json.JSONDecodeError`-u tutub retry edir. Şəbəkə, auth və `RuntimeError` (məsələn açar yoxdursa, və ya `OutputTruncatedError`) dərhal yuxarı ötürülür.
 - Retry prompt-u orijinal prompt-a bu cümləni əlavə edir: `"Your previous response was rejected: <xəta>\nFix it and respond with valid JSON only."` Hər cəhddə bu, orijinal prompt-a əlavə olunur, əvvəlki cəhdlərin xətaları yığılmır.
 - `choose_category` heç vaxt xəta qaldırmır: istənilən problemdə `"00 Inbox"` qaytarır. Bu, qəsdəndir, çünki səhv kateqoriya qeydin itməsindən yaxşıdır.
 - Təmir zamanı `decide_same_topic` və `DECISION_SYSTEM` silindi (P2-3), qalan prompt mətnləri dəyişmədi.
@@ -444,10 +459,11 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 | `report_existing(error)` | 44-52 | `None`. Adi `kb` dayananda mövcud qeydin başlığını, kateqoriyasını və yolunu göstərir, `kb --merge` təklif edir | `run` |
 | `get_input_text(args)` | 55-70 | `str`: `--file` faylı, arqumentlər və ya `stdin` | `run` |
 | `Spinner` | 73-98 | Ayrı thread-də `\|/-\` animasiyası. `start()`, `stop()` | `run`, `handle_split` |
-| `handle_split(backend, text)` | 100-199 | `None` | `run` |
-| `handle_delete()` | 201-233 | `None` | `run` |
-| `handle_reindex()` | 236-265 | `None` | `run` |
-| `run()` | 268-389 | `None` və ya `sys.exit(1)` | `__main__` (`python -m engine.cli`) |
+| `nearest_note(note, cache)` | 100-109 | Plan elementinə ən yaxın index qeydi `(slug, title, category, score)` və ya `None`. `(title, covers)` açarı ilə cache-lənir | `handle_split` |
+| `handle_split(backend, text)` | 112-230 | `None` | `run` |
+| `handle_delete()` | 232-264 | `None` | `run` |
+| `handle_reindex()` | 267-296 | `None` | `run` |
+| `run()` | 299-427 | `None` və ya `sys.exit(1)` | `__main__` (`python -m engine.cli`) |
 
 **`run()`-un sırası:**
 
@@ -464,8 +480,8 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 **Diqqət ediləcək cəhətlər:**
 
 - `--file` yalnız flag-lar silindikdən sonra **ilk qalan arqument** olanda tanınır (`engine/cli.py:56`). `kb --split --file x.md` və `kb --file x.md --merge` işləyir, çünki flag-lar istənilən yerdən silinir.
-- Rename sualı verilməzdən əvvəl spinner dayandırılır (`ask_rename`, `engine/cli.py:357-359`). Əks halda spinner-in `\r` yazıları sualın üstünə düşərdi.
-- `handle_split`-də plan elementləri `dict`-dir. CLI-ın özünün yaratdığı birləşdirilmiş element də `dict`-dir (`engine/cli.py:162-163`).
+- Rename sualı verilməzdən əvvəl spinner dayandırılır (`ask_rename`, `engine/cli.py:395-397`). Əks halda spinner-in `\r` yazıları sualın üstünə düşərdi.
+- `handle_split`-də plan elementləri `dict`-dir. CLI-ın özünün yaratdığı birləşdirilmiş element də `dict`-dir (`engine/cli.py:193-194`).
 - Uzunluq hədləri: adi `kb` və `--merge` üçün 30, `--split` və `--writeup` üçün 100 simvol. Qısa mətndə adi `kb` `exit(1)` edir, `--split` və `--writeup` isə sadəcə qayıdır.
 
 ### C.9. `engine/server.py`: köhnə (legacy) HTTP server
@@ -493,25 +509,29 @@ Prompt sabitləri: `TITLE_RULE` (6-16), `VALUE_HANDLING` (18-31), `CREATE_SYSTEM
 - **`engine/__init__.py`**: boşdur (0 bayt). Yalnız `engine` qovluğunu Python paketi kimi işarələyir ki, `python -m engine.cli` və `from engine import ...` işləsin.
 - **`kb`** (4 sətir): `cd ~/cke`, `source venv/bin/activate`, `python3 -m engine.cli "$@"`. `~/cke` yolu skriptin içində birbaşa yazılıb, ona görə repo başqa yerə clone edilsə, skript də dəyişdirilməlidir.
 - **`kb-local.sh`**: təmir zamanı silindi (`9b4d2f8`). Heç yerdən çağırılmırdı. Onun `nano` açma funksiyasını indi `kb --file <path>` əvəz edir.
-- **`tests/test_cke.py`** (811 sətir, 70 test) və **`tests/fixtures/`** (4 sintetik qeyd):
-  - **Təhlükəsizlik qurğusu** (`30-41`):
+- **`tests/test_cke.py`** (976 sətir, 81 test) və **`tests/fixtures/`** (4 sintetik qeyd):
+  - **Təhlükəsizlik qurğusu** (`31-43`):
     - `REAL_VAULT` istifadəçinin başlanğıcdakı `CKE_VAULT` dəyəridir;
     - `TEST_VAULT` müvəqqəti qovluqdur;
     - `os.environ["CKE_VAULT"]` engine import olunmazdan **əvvəl** dəyişdirilir;
     - `config.VAULT` müvəqqəti qovluğa bərabər deyilsə, test dəsti işə düşmür.
   - **Köməkçilər:**
-    - `fake_embed` (50): saxta vektor;
-    - `make_note` (54): test üçün `Note`;
-    - `outline` (62): qeydin başlığını, `##` başlıqlarını və kod sətirlərini **müstəqil** oxuyur. Round-trip testlərində gözlənilən nəticə budur;
-    - `FakeResponse` (86): `check_ollama` üçün saxta HTTP cavabı;
-    - `VaultTestCase` (97): hər test üçün boş vault yaradır, `llm.embed`-i saxta funksiya ilə əvəz edir, `llm.ask_json`-u bloklayır (model çağırılarsa test sınır), `stdout`-u tutur.
+    - `fake_embed` (53): saxta vektor;
+    - `make_note` (57): test üçün `Note`;
+    - `outline` (65): qeydin başlığını, `##` başlıqlarını və kod sətirlərini **müstəqil** oxuyur. Round-trip testlərində gözlənilən nəticə budur;
+    - `FakeResponse` (89): `check_ollama` üçün saxta HTTP cavabı;
+    - `VaultTestCase` (100): hər test üçün boş vault yaradır, `llm.embed`-i saxta funksiya ilə əvəz edir, `llm.ask_json`-u bloklayır (model çağırılarsa test sınır), `stdout`-u tutur;
+    - `REAL_ASK_JSON` (46): bloklanmamış `llm.ask_json`. API testləri onu saxta client ilə geri qoyur;
+    - `api_completion` (874): real `deepseek-flash` cavabı formasında `ChatCompletion` (usage və `finish_reason` ilə);
+    - `FakeApi` (885): mixin. Saxta DeepSeek client-i, təmiz `usage_records` və müvəqqəti `usage.log` verir, ona görə heç bir test real API-yə getmir və real `~/cke/usage.log`-a yazmır.
   - **Test sinifləri bəndlərə görə adlandırılıb:**
-    - `P0_1_ParserTests` (143), `P0_1_RealVaultRoundTrip` (181, yalnız `CKE_VAULT` təyin olunanda işləyir, vault-dan yalnız oxuyur), `P0_1_MergeSafetyTests` (203);
-    - `P0_2_DuplicateSlugTests` (270), `P0_3_NoOverwriteTests` (313);
-    - `P1_1_ReindexTests` (421), `P1_2_CategoryFolderTests` (488), `P1_3_LayoutCheckTests` (521);
-    - `P1_4_OllamaCheckTests` (538), `P1_4_CliChecksOllamaFirstTests` (565), `P1_4_NoUnindexedNoteTests` (596);
-    - `P1_5_SectionContentTests` (643), `P1_6_SlugifyTests` (690);
-    - `P2_1_SplitPlanTests` (722), `P2_4_DefaultBackendTests` (759), `P2_6_ServerAuthTests` (780).
+    - `P0_1_ParserTests` (146), `P0_1_RealVaultRoundTrip` (184, yalnız `CKE_VAULT` təyin olunanda işləyir, vault-dan yalnız oxuyur), `P0_1_MergeSafetyTests` (206);
+    - `P0_2_DuplicateSlugTests` (273), `P0_3_NoOverwriteTests` (316);
+    - `P1_1_ReindexTests` (483), `P1_2_CategoryFolderTests` (550), `P1_3_LayoutCheckTests` (583);
+    - `P1_4_OllamaCheckTests` (600), `P1_4_CliChecksOllamaFirstTests` (627), `P1_4_NoUnindexedNoteTests` (658);
+    - `P1_5_SectionContentTests` (705), `P1_6_SlugifyTests` (752);
+    - `P2_1_SplitPlanTests` (784), `P2_4_DefaultBackendTests` (821), `P2_6_ServerAuthTests` (842).
+  - **2026-10-16 əlavələri** (bənd nömrəsi yoxdur): `SplitNearDuplicateTests` (424, `--split` planındakı `≈` işarəsi), `ApiRequestTests` (904, thinking söndürülüb, `top_p` göndərilmir), `ApiUsageTests` (917, `usage.log`, kəsilmiş cavab, `--split`-in sonundakı cəm).
   - **İşə salmaq:** `cd ~/cke && source venv/bin/activate && python -m unittest discover -s tests -v`. Real vault yoxlaması da lazımdırsa, əvvəlinə `CKE_VAULT=~/Documents/CyberKB` əlavə edin. Python 3.11+ tələb olunur (`enterContext`).
   - **Fixture-lar** HTB materialı deyil, əl ilə yazılmış qısa nümunələrdir:
     - `code_comment.md`: kod blokunda `#` şərhi;
@@ -600,7 +620,7 @@ Model bu formada qaytarır, `SplitPlan` yoxlayır, `propose_split` isə dict kim
 
 ### D.5. `.env`
 
-`~/cke/.env` faylıdır, git-ə düşmür (`.gitignore`). `engine/llm.py:10` onu yükləyir.
+`~/cke/.env` faylıdır, git-ə düşmür (`.gitignore`). `engine/llm.py:11` onu yükləyir.
 
 ```bash
 DEEPSEEK_API_KEY=...        # API backend üçün məcburidir
@@ -722,7 +742,7 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 
 ### F.2. `CANDIDATE_THRESHOLD = 0.60`
 
-- **Seçim:** `0.60`-dan aşağı oxşarlıq namizəd sayılmır (`engine/config.py:25`). Ən çox 5 namizəd göstərilir.
+- **Seçim:** `0.60`-dan aşağı oxşarlıq namizəd sayılmır (`engine/config.py:25`). Ən çox 5 namizəd göstərilir. Eyni hədd `--split` planındakı `≈` işarəsi üçün də işlənir (B.2, addım 5).
 - **Dürüst qeyd:** bu rəqəm **ölçmə ilə əsaslandırılmayıb**. Hiss ilə seçilib. Repo-da merge dəqiqliyi üçün heç bir benchmark yoxdur. Bu rəqəmin doğru və ya səhv olduğunu demək üçün məlumat yoxdur.
 - **Qiyməti:** hədd yüksək olsa, əsl dublikatlar görünməz və yeni qeyd yaranar. Aşağı olsa, istifadəçi alakasız namizədlər görər. İstifadəçi həmişə `0` seçib yeni qeyd yarada bilər, ona görə ikinci səhv daha ucuzdur.
 
@@ -746,7 +766,10 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 
 ### F.5. `temperature = 0.2`
 
-- **Seçim:** hər iki backend-də aşağı temperatur (`engine/llm.py:45`, `64`). API-də əlavə olaraq `top_p = 0.95`.
+- **Seçim:** hər iki backend-də aşağı temperatur (`engine/llm.py:53`, `72`). API-də thinking rejimi söndürülür: `extra_body={"thinking": {"type": "disabled"}}` (`engine/llm.py:77`).
+- **Thinking qeydi (2026-10-16):** `deepseek-flash`-da thinking rejimi **defolt olaraq açıqdır**, thinking rejimində isə `temperature` səssizcə nəzərə alınmır: xəta yoxdur, sadəcə təsiri yoxdur ([DeepSeek sənədi](https://api-docs.deepseek.com/guides/thinking_mode)). Yəni thinking söndürülənə qədər API-də `0.2` işləmirdi, yalnız lokal backend-də işləyirdi. İndi thinking söndürülüb və temperatur tətbiq olunur.
+  - Əvvəlki `top_p = 0.95` silindi. Eyni sənədə görə `deepseek-flash`-da `top_p` yalnız thinking rejimində işləyir. Thinking olmadan o `1.0`-a sabitlənir və göndərilən dəyər nəzərə alınmır.
+  - Bir real çağırışla yoxlanıb: `finish_reason` `stop`-dur, cavabda `reasoning_content` yoxdur.
 - **Qiyməti:**
   - Aşağı temperatur modelin JSON formatına və göstərişlərə daha sabit əməl etməsinə kömək edir.
   - Amma mətn daha az müxtəlif olur. Ensiklopediya üçün bu, problem deyil.
@@ -754,7 +777,7 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 
 ### F.6. `_extract_json`-un `find("{")` / `rfind("}")` yanaşması
 
-- **Seçim:** cavabdan birinci `{` ilə sonuncu `}` arasındakı hissə kəsilib `json.loads` edilir (`engine/llm.py:73-78`).
+- **Seçim:** cavabdan birinci `{` ilə sonuncu `}` arasındakı hissə kəsilib `json.loads` edilir (`engine/llm.py:119-124`).
 - **Niyə:** modellər bəzən JSON-dan əvvəl "Here is the note:" kimi mətn və ya ```` ```json ```` fence-i yazır. Bu yanaşma həmin "qabığı" atır.
 - **Nə vaxt sınır:**
   - JSON-dan **əvvəl** və ya **sonra** gələn mətndə `{` və ya `}` olarsa, kəsilən hissəyə artıq mətn düşür;
@@ -766,17 +789,17 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 
 ### F.7. `REQUEST_TIMEOUT = 2400` hər sorğu üçündür
 
-- **Seçim:** lokal Ollama-ya göndərilən **hər bir** HTTP sorğusu 40 dəqiqəyə qədər gözləyə bilər (`engine/llm.py:49`).
+- **Seçim:** lokal Ollama-ya göndərilən **hər bir** HTTP sorğusu 40 dəqiqəyə qədər gözləyə bilər (`engine/llm.py:57`).
 - **Vacib:** bu, bütün iş üçün deyil. `--split` ilə N qeyd `1 + 2N` sorğu deməkdir və hər biri ayrıca 2400 saniyə ala bilər. Retry-lar da ayrıca sayılır.
 - **Niyə belə böyükdür:** 14B model uzun kontekstdə yavaş işləyir və qısa timeout işi yarımçıq kəsərdi.
 - **Digər timeout-lar:**
   - DeepSeek üçün `API_TIMEOUT = 600` saniyə, o da hər sorğu üçündür;
-  - embedding üçün 60 saniyə (`engine/llm.py:30`);
+  - embedding üçün 60 saniyə (`engine/llm.py:38`);
   - Ollama yoxlaması üçün 5 saniyə (`engine/cli.py:19`).
 
 ### F.8. Split planının insan tərəfindən təsdiqi
 
-- **Seçim:** model yalnız plan təklif edir. İstifadəçi elementləri birləşdirə, ata və ya bütün işi dayandıra bilər (`engine/cli.py:126-172`).
+- **Seçim:** model yalnız plan təklif edir. İstifadəçi elementləri birləşdirə, ata və ya bütün işi dayandıra bilər (`engine/cli.py:139-203`).
 - **Alternativ:** modelin planına birbaşa əməl etmək.
 - **Qiyməti:**
   - Hər `--split` interaktivdir və avtomatlaşdırılmır.
@@ -813,21 +836,23 @@ Hər qərar üçün üç sual cavablandırılır: nə seçildi, alternativ nə i
 | Simptom | Səbəb | Harada qalxır | Həlli |
 |---|---|---|---|
 | `ERROR: Ollama is not reachable at ..., or the embedding model 'nomic-embed-text' is not pulled` | Ollama işləmir və ya model yüklənməyib | `engine/cli.py:28-32` (`require_ollama`) | Ollama-nı işə salın, `ollama pull nomic-embed-text` |
-| Server-də 500: `ConnectionError ... /api/embeddings` | Server Ollama-nı əvvəlcədən yoxlamır | `engine/llm.py:27-32` (`embed`), `engine/main.py:7` | Ollama-nı işə salın. Fayl yazılmayıb |
-| `--local`-da HTTP 404 və ya model xətası | `qwen3:14b` yüklənməyib (CLI bunu yoxlamır) | `engine/llm.py:37-51` (`_ask_json_local`) | `ollama pull qwen3:14b` |
-| `ERROR: DEEPSEEK_API_KEY not found. Check your .env file.` | `.env` yoxdur və ya açar boşdur | `engine/llm.py:18-20` | `~/cke/.env`-ə `DEEPSEEK_API_KEY=...` yazın |
-| `ERROR: ...` (openai auth xətası, 401) | API açarı səhvdir və ya vaxtı keçib | `engine/llm.py:58` (`client.chat.completions.create`) | Açarı yeniləyin. Retry olunmur |
-| `ERROR: ...` (model tapılmadı) | DeepSeek model adını dəyişib və ya silib | `engine/llm.py:58` | `GET /models`-ə baxın, `config.API_MODEL`-i yeniləyin (F.9) |
-| `Attempt N rejected: ... JSON ...` | Model cavabında JSON yoxdur və ya JSON pozulub | `engine/llm.py:76-78` (`_extract_json`) | Avtomatik retry olunur |
+| Server-də 500: `ConnectionError ... /api/embeddings` | Server Ollama-nı əvvəlcədən yoxlamır | `engine/llm.py:35-40` (`embed`), `engine/main.py:7` | Ollama-nı işə salın. Fayl yazılmayıb |
+| `--local`-da HTTP 404 və ya model xətası | `qwen3:14b` yüklənməyib (CLI bunu yoxlamır) | `engine/llm.py:45-59` (`_ask_json_local`) | `ollama pull qwen3:14b` |
+| `ERROR: DEEPSEEK_API_KEY not found. Check your .env file.` | `.env` yoxdur və ya açar boşdur | `engine/llm.py:26-28` | `~/cke/.env`-ə `DEEPSEEK_API_KEY=...` yazın |
+| `ERROR: ...` (openai auth xətası, 401) | API açarı səhvdir və ya vaxtı keçib | `engine/llm.py:66` (`client.chat.completions.create`) | Açarı yeniləyin. Retry olunmur |
+| `ERROR: ...` (model tapılmadı) | DeepSeek model adını dəyişib və ya silib | `engine/llm.py:66` | `GET /models`-ə baxın, `config.API_MODEL`-i yeniləyin (F.9) |
+| `ERROR: model output hit max_tokens after N tokens; the JSON is incomplete. Not retrying.` (`--split`-də `ERROR on '<title>': ...`) | API cavabı `max_tokens=32768`-də kəsilib (`finish_reason == "length"`) | `engine/llm.py:80-84` (`OutputTruncatedError`) | Mətni qısaldın. Retry olunmur, çağırış `usage.log`-dadır |
+| `Attempt N rejected: ... JSON ...` | Model cavabında JSON yoxdur və ya JSON pozulub | `engine/llm.py:122-124` (`_extract_json`) | Avtomatik retry olunur |
 | `Attempt N rejected: ... validation error ...` | JSON var, amma forması səhvdir: boş başlıq, `content` `None`-dur və s. | `engine/brain.py:120` → `engine/schema.py` | Avtomatik retry olunur, səhv mesajı prompt-a əlavə edilir |
 | `ERROR: Model failed to produce valid output after 3 attempts. Last error: ...` | Üç cəhdin üçü də uğursuz olub | `engine/brain.py:124` | Mətni qısaldın və ya sadələşdirin, `--local` ilə sınayın. Heç nə yazılmayıb |
-| `ERROR during planning: ...` | `--split` planı 3 cəhddən sonra da yararsızdır | `engine/cli.py:116-119` | Yenidən işə salın və ya mətni bölün. Heç nə yazılmayıb |
+| `ERROR: embedding failed while checking for similar notes: ...` | `--split` planı göstərilməzdən əvvəl Ollama cavab vermədi | `engine/cli.py:149-154` | Ollama-nı işə salıb `--split`-i yenidən işə salın. Heç nə yazılmayıb, amma plan çağırışının pulu ödənib |
+| `ERROR during planning: ...` | `--split` planı 3 cəhddən sonra da yararsızdır | `engine/cli.py:128-131` | Yenidən işə salın və ya mətni bölün. Heç nə yazılmayıb |
 | `ERROR: Note '<slug>' not found` (merge) | Index-də ghost yazı var: fayl silinib və ya köçürülüb | `engine/main.py:35-36` | `kb --reindex` |
 | `ERROR: Note '<slug>' exists in more than one category (...)` | Eyni slug iki qovluqdadır | `engine/vault.py:36-39` (`find_note`) | Bir faylı əl ilə silin, sonra `kb --reindex` |
 | `ERROR: Merged title '...' gives an empty filename. Nothing was changed.` | Model yararsız başlıq qaytarıb | `engine/main.py:47-48` | Merge-i yenidən işə salın. Vault dəyişməyib |
 | `Title changed to '...'; keeping the filename ...` (və ya `..., but <kateqoriya>/<slug>.md is another note; keeping the filename ...`) | Merge başlığı dəyişib, amma rename təsdiqlənməyib, və ya yeni ad başqa qeydə aiddir | `engine/main.py:52-60` | Xəta deyil, qəsdən belədir |
 | `STOPPED: a note with this filename already exists. Nothing was written.` (`kb`), `skipped (already exists): ...` (`--split`), `ERROR: Note '<slug>' already exists in ...` (`--writeup`; server-də 500) | Bu slug-lı qeyd vault-da artıq var. Yaradılış mövcud qeydi heç vaxt əvəz etmir (P0-3) | `engine/vault.py:52-56` (`ensure_new`), `59-70` (`write_note`) | Mətni mövcud qeydə əlavə etmək üçün `kb --merge`. `--split`-də elementi `drop` etmək olar |
-| `Input too short (N chars). Nothing saved.` | `kb`/`--merge` üçün 30-dan, `--split`/`--writeup` üçün 100-dən az simvol | `engine/cli.py:323-325`, `104-106`, `298-300` | Daha uzun mətn verin |
+| `Input too short (N chars). Nothing saved.` | `kb`/`--merge` üçün 30-dan, `--split`/`--writeup` üçün 100-dən az simvol | `engine/cli.py:361-363`, `116-118`, `336-338` | Daha uzun mətn verin |
 | `File not found: <path>` | `--file` yolu səhvdir | `engine/cli.py:61-63` | Yolu yoxlayın |
 | `kb --reindex` hesabatında `remove from index` / `fix category` / `add to index` | Index və vault uyğunsuzdur (Finder/Obsidian-da silmə və ya köçürmə) | `engine/main.py:93-110` | `yes` cavabı verin |
 | `kb --reindex`-də `WARNING ... nested` / `missing at the top level` | Kateqoriya qovluğu yanlış yerdədir | `engine/vault.py:9-18` | Qovluğu əl ilə düzəldin |
@@ -852,8 +877,8 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
 ### H.2. Başqa chat modeli
 
 - **Lokal:** `config.CHAT_MODEL`-i dəyişin, sonra `ollama pull <model>`.
-- **OpenAI ilə uyğun API:** `config.API_BASE_URL` və `config.API_MODEL`-i dəyişin. `.env`-dəki açar adı (`DEEPSEEK_API_KEY`) `engine/llm.py:18`-də birbaşa yazılıb, onu da dəyişmək lazım ola bilər.
-- **OpenAI ilə uyğun olmayan provayder:** `engine/llm.py`-də yeni `_ask_json_<ad>` funksiyası yazın və `ask_json`-a (`engine/llm.py:81-86`) yeni qol əlavə edin. `cli.py`-də backend-i seçən flag lazım olacaq.
+- **OpenAI ilə uyğun API:** `config.API_BASE_URL` və `config.API_MODEL`-i dəyişin. `.env`-dəki açar adı (`DEEPSEEK_API_KEY`) `engine/llm.py:26`-də birbaşa yazılıb, onu da dəyişmək lazım ola bilər.
+- **OpenAI ilə uyğun olmayan provayder:** `engine/llm.py`-də yeni `_ask_json_<ad>` funksiyası yazın və `ask_json`-a (`engine/llm.py:127-132`) yeni qol əlavə edin. `cli.py`-də backend-i seçən flag lazım olacaq.
 
 **Qiymətləndirmə:** yaxşı ayrılıb. `brain.py` və `main.py` modeli tanımır, yalnız `ask_json`-u çağırır.
 
@@ -867,12 +892,12 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
 
 ### H.4. Yeni CLI rejimi
 
-1. `engine/cli.py`-də `run()`-a flag qolu əlavə edin. Rejim embedding tələb edirsə, qol `require_ollama()`-dan (`engine/cli.py:277`) sonra olmalıdır, tələb etmirsə, `--delete` kimi ondan əvvəl.
+1. `engine/cli.py`-də `run()`-a flag qolu əlavə edin. Rejim embedding tələb edirsə, qol `require_ollama()`-dan (`engine/cli.py:308`) sonra olmalıdır, tələb etmirsə, `--delete` kimi ondan əvvəl.
 2. İnteraktiv hissəni `handle_<ad>()` funksiyasına, iş axınını isə `engine/main.py`-yə yazın. Yazma lazımdırsa, `save_note`-dan istifadə edin ki, sıra qorunsun.
 3. Yeni prompt lazımdırsa, `engine/brain.py`-də onu və `generate_validated`-i çağıran funksiyanı əlavə edin. Yeni cavab forması lazımdırsa, `engine/schema.py`-də model yazın və onu `schema=` ilə ötürün (`--split` kimi).
 4. `tests/test_cke.py`-yə `VaultTestCase` əsasında test əlavə edin.
 
-**Qiymətləndirmə:** nümunə hazırdır (`--writeup` ən sadəsidir). `run()` uzun bir funksiyadır (`engine/cli.py:268-389`), ona görə flag-ların sırası diqqət tələb edir.
+**Qiymətləndirmə:** nümunə hazırdır (`--writeup` ən sadəsidir). `run()` uzun bir funksiyadır (`engine/cli.py:299-427`), ona görə flag-ların sırası diqqət tələb edir.
 
 ### H.5. Başqa saxlama formatı
 
@@ -918,15 +943,16 @@ Bu bölmə modulluq iddiasını yoxlayır: harada asandır və harada kod bir-bi
    - log rotation-u launchd və ya `newsyslog` vasitəsilə həll etmək.
 
    Bu, Nazirin 2026-10-12 qərarıdır: hələlik localhost (variant a), token yolu isə server yenidən yazılanda.
-2. **Böyük girişlər üçün chunking.** `--split` mətni modelə bütöv göndərir, onu kontekstə sığdıracaq mexanizm isə yoxdur. Giriş və çıxış birlikdə 128K tokenlik kontekstə sığmalıdır. Çıxışa `max_tokens=32768` ayrılıb (`engine/llm.py:66`), ona görə system prompt-dan sonra girişə təxminən 95K token qalır.
-   - Adi ingilis mətnində (~1.3 token/söz) bu, təxminən **70K söz** edir. Əmrlər, hash-lər və IP-lər token sayını artırır. Köhnə modulun öz ehtiyatlı təxmini ilə (1.8 token/söz) hədd ~50K sözdür. 100K sözlük giriş üçün chunking hər halda lazımdır.
-   - `--local`-da hədd xeyli aşağıdır: `NUM_CTX = 8192` token (`engine/config.py:27`).
-   - 128K rəqəminin özü yoxlanmayıb (`Solution.md` → "Hələ açıq").
+2. **Böyük girişlər üçün chunking: lazım deyil (2026-10-16).** `--split` mətni modelə bütöv göndərir. Bu bənddə əvvəl ~70K söz həddi yazılmışdı, o isə yoxlanmamış "128K kontekst" rəqəminə əsaslanırdı. Rəqəm səhv çıxdı.
+   - [DeepSeek-in qiymət səhifəsinə](https://api-docs.deepseek.com/quick_start/pricing) görə `deepseek-flash` DeepSeek-V4.1-Flash-dır: kontekst **1M** token, maksimum çıxış 384K token.
+   - Nazirin ən böyük modulu təxminən **175K token**dir. System prompt və çıxışa ayrılan `max_tokens=32768` (`engine/llm.py:73`) ilə birlikdə 1M-ə rahat sığır. Ona görə API backend-də chunking lazım deyil.
+   - `--local`-da hədd hələ də xeyli aşağıdır: `NUM_CTX = 8192` token (`engine/config.py:27`). Böyük modul `--local` ilə bölünməyə sığmır.
 
-   Köhnə modul `65d8b47^`-də qalır (`git show 65d8b47^:engine/chunker.py`), amma olduğu kimi qaytarılmamalıdır: `####` başlıqlarını tanımırdı və kod blokundakı `# ` sətrini başlıq sayırdı. Onu yenidən yazmaq lazımdır. Təməl P0-1-in fence-aware parseri olmalıdır (`engine/vault.py:107-139`).
+   Köhnə `chunker.py` geri qaytarılmır, silinmə qərarı qətidir (`Solution.md`, P2-2). O, git tarixçəsində qalır (`git show 65d8b47^:engine/chunker.py`).
 3. **`--split` hər qeyd üçün bütün mətni yenidən göndərir.** `process_from_plan` hər plan elementi üçün `focus_prompt`-a **tam** mənbə mətni qoyur (`engine/main.py:150-158`). 50 qeydlik planda eyni modul 50 dəfə göndərilir, API xərci və vaxt da təxminən o qədər artır. Bu problem chunking-dən asılı deyil və kiçik modullarda da indi xərc yaradır.
    - Kontekst limiti hər çağırışa ayrıca tətbiq olunur. Qeydlərin sayı limiti özü aşmır, amma mətn bir çağırışa sığmırsa, 50 çağırışın heç biri sığmır.
-   - **Həll:** hər qeydə yalnız öz hissəsini göndərmək. Plan hər element üçün artıq `source_hint` qaytarır ("which heading(s) or part(s) of the input this note draws from", `engine/brain.py:195`). Hazırda bu sahə mətni kəsmək üçün istifadə olunmur, prompt-a yalnız göstəriş kimi gedir. Chunking-in parseri ilə birlikdə hissəni məhz bu sahəyə görə seçmək olar.
+   - **Həll:** hər qeydə yalnız öz hissəsini göndərmək. Plan hər element üçün artıq `source_hint` qaytarır ("which heading(s) or part(s) of the input this note draws from", `engine/brain.py:195`). Hazırda bu sahə mətni kəsmək üçün istifadə olunmur, prompt-a yalnız göstəriş kimi gedir. Hissəni bu sahəyə görə seçmək üçün P0-1-in fence-aware parseri (`engine/vault.py:107-139`) təməl ola bilər.
+   - **Ölçmə:** xərci indi `usage.log` (C.5) və `--split`-in sonundakı `API usage` sətri göstərir. Mənbə mətni prompt-un əvvəlindədir və system prompt hər qeyd üçün eynidir. Ona görə DeepSeek-in context cache-i təkrar göndərişlərin çoxunu cache hit kimi hesablaya bilər, cache hit isə miss-dən 50 dəfə ucuzdur. Bu, real `--split` log-u ilə hələ yoxlanmayıb.
 4. Index üçün atomik yazma: müvəqqəti fayl, sonra `os.replace`.
 5. `CANDIDATE_THRESHOLD` üçün kiçik, əl ilə etiketlənmiş benchmark.
 6. Prompt injection üçün ən azı bunlar: girişin sərhədlərini açıq qeyd etmək və nəticəni məzmun baxımından yoxlamaq.
@@ -942,7 +968,7 @@ Təmir tapşırığındakı P2 bəndlərinin hamısı bağlanıb. P2-6-da kod ha
 | **atomic note** (atomik qeyd) | Yalnız bir aləti, bir texnikanı və ya bir anlayışı əhatə edən qeyd. Sabah ayrıca axtarılacaq hər mövzu öz qeydini alır |
 | **backend** | Chat modelinin işlədiyi yer: `api` (DeepSeek bulud xidməti) və ya `local` (kompüterdəki Ollama). Embedding həmişə lokaldır |
 | **callback** | Bir funksiyaya ötürülən və sonra onun tərəfindən çağırılan başqa funksiya. `merge_into` rename sualını `confirm_rename` callback-i vasitəsilə verir |
-| **chunk** (hissə) | Böyük mətnin kiçik parçası. Silinmiş `chunker.py` mətni başlıqlara görə chunk-lara bölürdü. Hazırkı kodda chunk yoxdur: `--split` mətni bütöv göndərir |
+| **chunk** (hissə) | Böyük mətnin kiçik parçası. Silinmiş `chunker.py` mətni başlıqlara görə chunk-lara bölürdü. Hazırkı kodda chunk yoxdur: `--split` mətni bütöv göndərir, 1M kontekstdə buna ehtiyac da yoxdur (I bölməsi) |
 | **cosine similarity** (kosinus oxşarlığı) | İki vektorun istiqamətinin nə qədər yaxın olduğunu ölçür. 1 eyni istiqamət deməkdir, 0 əlaqə yoxdur deməkdir. `memory.similarity` bunu hesablayır |
 | **embedding** | Mətnin mənasını əks etdirən rəqəm vektoru. Mənaca yaxın mətnlərin vektorları da yaxın olur. Burada `nomic-embed-text` hər mətn üçün 768 rəqəm qaytarır |
 | **fence** (kod bloku sərhədi) | Markdown-da kod blokunu açan və bağlayan ```` ``` ```` və ya `~~~` sətri |

@@ -88,7 +88,7 @@ NEW parser (HEAD):    title correct 55, corrupted 0
 
 `save_note` P1-4-də, `fallback=False` isə P1-6-da əlavə olundu. Yuxarıdakı kod son haldır.
 
-3. `engine/cli.py:35-41` (`confirm_rename`) və `engine/cli.py:357-362` (`ask_rename`): sual CLI-da verilir. Terminal yoxdursa (`stdin` TTY deyil), cavab avtomatik "yox" sayılır. Sual çıxmazdan əvvəl spinner dayandırılır, yoxsa onun üstünə yazardı.
+3. `engine/cli.py:35-41` (`confirm_rename`) və `engine/cli.py:395-400` (`ask_rename`): sual CLI-da verilir. Terminal yoxdursa (`stdin` TTY deyil), cavab avtomatik "yox" sayılır. Sual çıxmazdan əvvəl spinner dayandırılır, yoxsa onun üstünə yazardı.
 
 **Niyə bu yanaşma.**
 
@@ -153,7 +153,7 @@ Düzəlişdən əvvəl bu test `24/55` göstərirdi: 30 qeyddə başlıq korlan�
 
 - `engine/vault.py:30-42` (`find_note`): bütün uyğun faylları toplayır. Birdən çox tapılarsa, kateqoriyaları sadalayan `RuntimeError` qaldırır. Qovluqlar sabit ardıcıllıqla gəzilir: əvvəl `sorted(...)` ilə, P1-2-dən sonra `config` sırası ilə.
 - `engine/vault.py:59-70` (`write_note`): əvvəl yeni fayl yazılır, sonra köhnə kateqoriyadakı fayl silinir. P0-3-dən sonra bu, yalnız `replace=True` ilə, yəni merge-də baş verir.
-- `engine/cli.py:223-228`: dublikat xətası `kb --delete`-də traceback kimi yox, `ERROR: ...` kimi göstərilir.
+- `engine/cli.py:254-259`: dublikat xətası `kb --delete`-də traceback kimi yox, `ERROR: ...` kimi göstərilir.
 
 ```diff
  def write_note(slug, category, markdown):
@@ -242,9 +242,9 @@ kb, other category: 01 Networking/dig.md -> New summary.
 - `engine/main.py:148-149`: `process_from_plan` slug-ı plan başlığından hesablayır və **heç bir model çağırışından əvvəl** `ensure_new` çağırır.
 - `engine/main.py:52-57`, `65`: merge-də yeni ad başqa qeydə aiddirsə, rename təklif olunmur və köhnə ad qalır. `save_note(..., replace=new_slug == target_slug)`: yalnız birləşdirilən qeydin özü əvəz oluna bilər.
 - `engine/main.py:82-90`: `notes_on_disk()`. `find_index_drift`-dəki qovluq skanı ayrıca funksiyaya çıxarıldı ki, split planı da ondan istifadə etsin. Dublikatda xəta vermir.
-- `engine/cli.py:44-52`, `382-385`: `report_existing`. Adi `kb` dayananda başlığı (fayldan oxunur), kateqoriyanı və yolu göstərir, `kb --merge` təklif edir və `exit(1)` edir.
-- `engine/cli.py:127-137`: plan göstəriləndə mövcud elementlərin yanında `[exists: <kateqoriya>]` yazılır.
-- `engine/cli.py:186-190`, `194-199`: yazma mərhələsində `NoteExistsError` tutulur, element keçilir, sonda keçilənlərin siyahısı çap olunur.
+- `engine/cli.py:44-52`, `420-423`: `report_existing`. Adi `kb` dayananda başlığı (fayldan oxunur), kateqoriyanı və yolu göstərir, `kb --merge` təklif edir və `exit(1)` edir.
+- `engine/cli.py:141`, `157-165`: plan göstəriləndə mövcud elementlərin yanında `[exists: <kateqoriya>]` yazılır.
+- `engine/cli.py:217-221`, `225-230`: yazma mərhələsində `NoteExistsError` tutulur, element keçilir, sonda keçilənlərin siyahısı çap olunur.
 - `tests/test_cke.py`: `P0_3_NoOverwriteTests` (8 test). İki P0-2 testi yeniləndi (aşağıda).
 - `README.md`: `--split` addımları, `kb` sətri və "Never lose a note" bəndi yeni davranışı təsvir edir.
 
@@ -373,7 +373,7 @@ Tam dəst 70 test ilə keçir, real vault round-trip 55/55-dir (aşağıda, "Tes
 
 - `engine/main.py:93-110` (`find_index_drift`): yalnız oxuyur. Uyğunsuzluğun dörd növünü qaytarır: `missing_file`, `wrong_category`, `not_indexed`, `duplicate`.
 - `engine/main.py:113-126` (`repair_index`): index-i diskə uyğunlaşdırır. Lazım olan bütün embedding-ləri əvvəlcə alır, sonra index-i bir dəfə yazır. Dublikatlara toxunmur.
-- `engine/cli.py:236-265` (`handle_reindex`) və `engine/cli.py:279-281`: `kb --reindex` əmri. Əvvəl Ollama yoxlanır, sonra hesabat çap olunur. Dəyişiklik yalnız `yes` cavabından sonra edilir.
+- `engine/cli.py:267-296` (`handle_reindex`) və `engine/cli.py:310-312`: `kb --reindex` əmri. Əvvəl Ollama yoxlanır, sonra hesabat çap olunur. Dəyişiklik yalnız `yes` cavabından sonra edilir.
 
 **Niyə bu yanaşma.**
 
@@ -497,7 +497,7 @@ CLAUDE/PLAN listed: []
 **Dəyişiklik.**
 
 - `engine/vault.py:9-18` (`check_layout`): iki siyahı qaytarır. Birincisi yuxarı səviyyədə olmayan classifier kateqoriyalarıdır, ikincisi başqa kateqoriyanın içində olan kateqoriya qovluqlarıdır.
-- `engine/cli.py:243-247`: `kb --reindex` bunları xəbərdarlıq kimi göstərir.
+- `engine/cli.py:274-278`: `kb --reindex` bunları xəbərdarlıq kimi göstərir.
 - Vault-da Nazirin təsdiqindən sonra qovluqlar düzəldildi.
 
 **Niyə bu yanaşma.** Yoxlama yalnız hesabat verir və avtomatik heç nə düzəltmir. Vault-da qovluq köçürmək istifadəçinin qərarıdır. Bu həm də birdəfəlik işdir. Yoxlama maintenance (texniki baxım) əmrinə qoyuldu, hər işə salınmada yox: adi `kb` işini yavaşlatmasın və hər dəfə eyni xəbərdarlıqla mane olmasın.
@@ -535,7 +535,7 @@ Qovluq boş idi, `.DS_Store` da yox idi. Sandbox `rmdir`-i bloklamadı.
 
 **Dəyişiklik.** Qoruma iki qatdan ibarətdir.
 
-1. **CLI-da yoxlama** (`engine/cli.py:11-32`, `engine/cli.py:275-277`):
+1. **CLI-da yoxlama** (`engine/cli.py:11-32`, `engine/cli.py:306-308`):
    - `require_ollama()` `--delete`-dən başqa hər rejimdə, hər iki backend-də (modelin işlədiyi yer) ən əvvəl çağırılır.
    - `check_ollama` HTTP 200 tələb edir və `config.EMBED_MODEL`-in `/api/tags`-də olub-olmadığını yoxlayır. Tag nəzərə alınmadan müqayisə edir: `nomic-embed-text` == `nomic-embed-text:latest`.
 2. **Yazma sırası** (Nazirin düzəlişi). `memory.update_entry` iki funksiyaya bölündü: `embed_entry` (şəbəkə, `engine/memory.py:24-30`) və `save_entry` (disk, `engine/memory.py:33-36`). Bütün yazma yolları `main.save_note`-dan keçir (`engine/main.py:4-9`):
@@ -820,7 +820,7 @@ $ python -m unittest discover -s tests
 OK (skipped=1)
 ```
 
-**Qeyd (2026-10-13):** silinmə qərarı Nazirin gələcək planını bilmədən verilib. Nazir modulu 100K sözlük girişlər üçün saxlayırdı. Modul git tarixçəsində qalır (`git show 65d8b47^:engine/chunker.py`). Geri qaytarılmadı, çünki yenidən yazılmalıdır (`Explanation.md`, I bölməsi, gələcək iş 2).
+**Qeyd (2026-10-13, yekunlaşdırıldı 2026-10-16):** silinmə qərarı əvvəlcə Nazirin gələcək planını bilmədən verilmişdi: Nazir modulu 100K sözlük girişlər üçün saxlayırdı. Bu plan yoxlanmamış "128K kontekst" rəqəminə əsaslanırdı. 2026-10-16-da DeepSeek-in sənədi ilə 1M kontekst təsdiqləndi: `deepseek-flash` DeepSeek-V4.1-Flash-dır, kontekst 1M token, maksimum çıxış 384K token (https://api-docs.deepseek.com/quick_start/pricing). Nazirin ən böyük modulu ~175K tokendir və bir çağırışa rahat sığır, ona görə chunker-ə ehtiyac qalmadı. **Silinmə qərarı qətidir.** Modul yalnız git tarixçəsində qalır (`git show 65d8b47^:engine/chunker.py`).
 
 **Commit:** `65d8b47 refactor(P2-2): delete unused chunker module`
 
@@ -853,7 +853,7 @@ no references left
 
 **Diaqnoz.** `cli.py`-də `backend = "api"` birbaşa yazılmışdı. `config.py`-də `DEFAULT_BACKEND`-i dəyişmək CLI-a heç bir təsir etmirdi.
 
-**Dəyişiklik.** `engine/cli.py:283`:
+**Dəyişiklik.** `engine/cli.py:314`:
 
 ```diff
 -    backend = "api"
@@ -904,7 +904,7 @@ OK
 - **`or` operatoru:** boş `CKE_VAULT=` dəyəri defolt yola qayıdır. Əks halda boş yol cari qovluğu vault sayardı.
 - **`expanduser()`:** dırnaq içində yazılmış `~` da düzgün açılır.
 - **`INDEX_FILE` hələ də `VAULT`-dan törəyir.**
-- **Məhdudiyyət:** `CKE_VAULT` `.env`-dən **oxunmur**. `config` modulu `load_dotenv`-dən (`engine/llm.py:10`) əvvəl import olunur. Ona görə bu dəyişən shell-də təyin olunmalıdır. README-də də belə yazılıb.
+- **Məhdudiyyət:** `CKE_VAULT` `.env`-dən **oxunmur**. `config` modulu `load_dotenv`-dən (`engine/llm.py:11`) əvvəl import olunur. Ona görə bu dəyişən shell-də təyin olunmalıdır. README-də də belə yazılıb.
 
 **Yoxlama.** Scratchpad yolu `<scratchpad>` kimi qısaldılıb, qalanı real çıxışdır:
 
@@ -989,7 +989,7 @@ LOCAL_ONLY = True | host = 127.0.0.1 | token configured = False
 
 **Vəziyyət:** Düzəldildi.
 
-**Dəyişiklik.** `--split` blokunda (`engine/cli.py:289-292`) 3 boşluqluq girinti 4 boşluğa düzəldildi. 4 sətirdə sətir sonundakı boşluqlar silindi. `--split` blokundan sonrakı üç boş sətir bir sətrə endirildi, digər bloklarda olduğu kimi.
+**Dəyişiklik.** `--split` blokunda (`engine/cli.py:320-330`) 3 boşluqluq girinti 4 boşluğa düzəldildi. 4 sətirdə sətir sonundakı boşluqlar silindi. `--split` blokundan sonrakı üç boş sətir bir sətrə endirildi, digər bloklarda olduğu kimi.
 
 **Yoxlama.** Məntiq dəyişməyib:
 
@@ -1128,7 +1128,7 @@ Bunları tapdım, amma düzəltmədim. Ya tapşırıqda yox idi, ya da qərar Na
 5. **`CANDIDATE_THRESHOLD = 0.60` ölçülməyib.** Bu rəqəm hiss ilə seçilib, repo-da dəqiqlik benchmark-ı yoxdur.
 6. **Prompt injection** (mətnə gizlədilmiş, modeli yönləndirən zərərli təlimat) **qarşısı alınmayıb.** Etibarsız mətn birbaşa LLM-ə gedir, nəticə diskə yazılır. P2-6 yalnız şəbəkə tərəfini bağlayır.
 7. **`kb --merge` pipe ilə işləmir.** `stdin` pipe olanda "Merge into which note?" sualındakı `input()` `EOFError` verir. Bu, köhnə davranışdır.
-8. **README-dəki "128K context" iddiasını yoxlamadım.** O, DeepSeek modelinin xüsusiyyəti haqqındadır və Nazirin orijinal mətnidir.
+8. **Bağlandı (2026-10-16): README-dəki "128K context" iddiası səhv idi.** Əvvəl yoxlamamışdım, çünki o, Nazirin orijinal mətni idi. DeepSeek-in qiymət səhifəsinə görə `deepseek-flash` DeepSeek-V4.1-Flash-dır: kontekst 1M token, maksimum çıxış 384K token. README düzəldildi. Chunking-in lazım olmadığı nəticəsi P2-2-dədir.
 9. **launchd crash döngüsü.** 7448 dəfə `Address already in use` olub. Ehtimal olunan səbəb: server əl ilə işə salınanda launchd agent-i də işləyirdi. Agent yüklü olanda server-i əl ilə işə salmamaq lazımdır.
 10. **Index sinxronlaşdırılan qovluqdadır** (Syncthing). Pipeline iki maşında eyni vaxtda işləsə, index-də konflikt yarana bilər.
 11. **Model id dəyişə bilər** (P1-7). DeepSeek adları bir dəfə dəyişib. `/models`-i vaxtaşırı yoxlamaq faydalıdır.
