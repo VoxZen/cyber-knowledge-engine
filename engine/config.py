@@ -41,3 +41,10 @@ SERVER_PORT = 8000
 API_BASE_URL = "https://api.deepseek.com"
 API_MODEL = "deepseek-flash"
 API_TIMEOUT = 600
+# Every API call is appended here as one JSON line (gitignored)
+USAGE_LOG = Path(__file__).resolve().parent.parent / "usage.log"
+# deepseek-flash prices in USD per 1M tokens, off-peak. Peak hours
+# (01:00-04:00 and 06:00-10:00 UTC, Monday to Friday) cost twice as much.
+PRICE_CACHE_HIT = 0.003
+PRICE_CACHE_MISS = 0.15
+PRICE_OUTPUT = 0.6

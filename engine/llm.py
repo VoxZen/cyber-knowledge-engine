@@ -1,6 +1,7 @@
 import requests
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -10,6 +11,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
 _api_client = None
+
+# Usage of every API call this process made, oldest first. Also appended to config.USAGE_LOG.
+usage_records = []
+
+
+class OutputTruncatedError(RuntimeError):
+    """The model stopped at max_tokens. Not a ValueError, so generate_validated does not retry it."""
 
 
 def get_api_client():
@@ -68,8 +76,44 @@ def _ask_json_api(system, prompt):
         # top_p is not sent: outside thinking mode deepseek-flash fixes it at 1.0.
         extra_body={"thinking": {"type": "disabled"}},
     )
+    record = record_usage(completion)
+    if record["finish_reason"] == "length":
+        # The JSON is cut off. A retry would cost the same and be cut off again.
+        raise OutputTruncatedError(
+            f"model output hit max_tokens after {record['completion_tokens']:,} tokens; "
+            f"the JSON is incomplete. Not retrying.")
     raw = completion.choices[0].message.content
     return _extract_json(raw)
+
+
+def record_usage(completion):
+    """Keep the token counts of one API call, in memory and as one JSON line in the usage log."""
+    def tokens(name):
+        return getattr(completion.usage, name, None) or 0
+
+    record = {
+        "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "model": completion.model,
+        "prompt_cache_hit_tokens": tokens("prompt_cache_hit_tokens"),
+        "prompt_cache_miss_tokens": tokens("prompt_cache_miss_tokens"),
+        "completion_tokens": tokens("completion_tokens"),
+        "finish_reason": completion.choices[0].finish_reason,
+    }
+    usage_records.append(record)
+    with open(config.USAGE_LOG, "a", encoding="utf-8") as log:
+        log.write(json.dumps(record) + "\n")
+    return record
+
+
+def usage_summary(records):
+    """One line: calls, input tokens (cache hit / miss), output tokens, cost at off-peak prices."""
+    hit = sum(r["prompt_cache_hit_tokens"] for r in records)
+    miss = sum(r["prompt_cache_miss_tokens"] for r in records)
+    out = sum(r["completion_tokens"] for r in records)
+    cost = (hit * config.PRICE_CACHE_HIT + miss * config.PRICE_CACHE_MISS
+            + out * config.PRICE_OUTPUT) / 1_000_000
+    calls = f"{len(records)} call" + ("" if len(records) == 1 else "s")
+    return f"{calls}, {hit:,} hit / {miss:,} miss, {out:,} output, ~${cost:.4f}"
 
 
 def _extract_json(raw):

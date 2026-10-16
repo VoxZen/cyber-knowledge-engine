@@ -3,7 +3,7 @@ import threading
 import time
 from pathlib import Path
 import requests
-from engine import main, config, vault
+from engine import main, config, llm, vault
 from engine.main import process, find_merge_candidates, merge_into
 from engine.vault import NoteExistsError
 
@@ -288,7 +288,14 @@ def run():
     if "--split" in args:
         args = [a for a in args if a != "--split"]
         split_text = get_input_text(args)
-        handle_split(backend, split_text)
+        first_call = len(llm.usage_records)
+        try:
+            handle_split(backend, split_text)
+        finally:
+            # Also after cancel or an error: the planning call is already paid for
+            calls = llm.usage_records[first_call:]
+            if calls:
+                print(f"API usage: {llm.usage_summary(calls)}")
         return
 
     if "--writeup" in args:

@@ -7,6 +7,7 @@ Safety rules of this suite:
 - CKE_VAULT is pointed at a fresh temporary folder *before* the engine is imported,
   so no test can touch the real vault.
 - No test calls a real model: llm.embed is faked and llm.ask_json is blocked.
+  The API tests replace the DeepSeek client with a fake and write usage to a temporary log.
 - Fixtures in tests/fixtures/ are synthetic. Real notes are never copied into the repo.
 
 One test reads the real vault, read-only and in place. It runs only when CKE_VAULT
@@ -42,6 +43,7 @@ if config.VAULT != TEST_VAULT:
     raise RuntimeError(f"Refusing to run: engine points at {config.VAULT}, not the test vault")
 
 FIXTURES = Path(__file__).parent / "fixtures"
+REAL_ASK_JSON = llm.ask_json  # VaultTestCase blocks it; the API tests put it back with a fake client
 
 
 def tearDownModule():
@@ -810,31 +812,105 @@ class P2_6_ServerAuthTests(VaultTestCase):
 
 # ---------------------------------------------------------------- API calls
 
-def api_completion(content='{"category": "08 Tools"}'):
+def api_completion(content='{"category": "08 Tools"}', hit=0, miss=25, out=6, finish_reason="stop"):
     """A chat completion shaped like a real deepseek-flash response (checked 2026-10-16)."""
     return ChatCompletion.model_validate({
         "id": "test", "object": "chat.completion", "created": 0, "model": "deepseek-flash",
-        "choices": [{"index": 0, "finish_reason": "stop",
+        "choices": [{"index": 0, "finish_reason": finish_reason,
                      "message": {"role": "assistant", "content": content}}],
+        "usage": {"prompt_tokens": hit + miss, "completion_tokens": out, "total_tokens": hit + miss + out,
+                  "prompt_cache_hit_tokens": hit, "prompt_cache_miss_tokens": miss},
     })
 
 
-class ApiRequestTests(unittest.TestCase):
+class FakeApi:
+    """Mixin: a fake DeepSeek client, a fresh usage list and a temporary usage log."""
+
+    def setUp(self):
+        super().setUp()
+        self.log = Path(tempfile.mkdtemp(prefix="cke-test-usage-")) / "usage.log"
+        self.addCleanup(shutil.rmtree, self.log.parent, ignore_errors=True)
+        self.enterContext(mock.patch.object(config, "USAGE_LOG", self.log))
+        self.enterContext(mock.patch.object(llm, "usage_records", []))
+        self.client = mock.Mock()
+        self.enterContext(mock.patch.object(llm, "get_api_client", return_value=self.client))
+
+    def answer(self, *completions):
+        self.client.chat.completions.create.side_effect = list(completions)
+
+    def logged(self):
+        return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
+
+
+class ApiRequestTests(FakeApi, unittest.TestCase):
     """The DeepSeek request: thinking off, so temperature applies; no top_p."""
 
-    def call_api(self, completion):
-        client = mock.Mock()
-        client.chat.completions.create.return_value = completion
-        with mock.patch.object(llm, "get_api_client", return_value=client):
-            result = llm._ask_json_api("system", "prompt")
-        return result, client.chat.completions.create.call_args.kwargs
-
     def test_thinking_is_disabled_and_top_p_is_not_sent(self):
-        result, sent = self.call_api(api_completion())
+        self.answer(api_completion())
+        result = llm._ask_json_api("system", "prompt")
+        sent = self.client.chat.completions.create.call_args.kwargs
         self.assertEqual(result, {"category": "08 Tools"})
         self.assertEqual(sent["extra_body"], {"thinking": {"type": "disabled"}})
         self.assertEqual(sent["temperature"], 0.2)
         self.assertNotIn("top_p", sent)
+
+
+class ApiUsageTests(FakeApi, VaultTestCase):
+    """Every API call is logged; a cut-off answer stops at once; --split prints the total."""
+
+    PLAN = '{"notes": [{"title": "Whois", "type": "tool", "covers": "domain lookups"}]}'
+    NOTE = '{"title": "Whois", "summary": "Domain lookups.", "sections": [{"heading": "Usage", "content": "whois x"}]}'
+
+    def test_each_call_is_one_json_line_in_the_log(self):
+        self.answer(api_completion(hit=1200, miss=300, out=40), api_completion(hit=0, miss=25, out=6))
+        llm._ask_json_api("system", "first")
+        llm._ask_json_api("system", "second")
+        logged = self.logged()
+        self.assertEqual(logged, llm.usage_records)
+        self.assertEqual([(r["prompt_cache_hit_tokens"], r["prompt_cache_miss_tokens"], r["completion_tokens"])
+                          for r in logged], [(1200, 300, 40), (0, 25, 6)])
+        self.assertEqual({(r["model"], r["finish_reason"]) for r in logged}, {("deepseek-flash", "stop")})
+
+    def test_cut_off_output_is_logged_and_not_retried(self):
+        self.answer(*[api_completion('{"title": "Nmap", "sum', out=32768, finish_reason="length")] * 3)
+        with mock.patch.object(llm, "ask_json", REAL_ASK_JSON):
+            with self.assertRaises(llm.OutputTruncatedError) as ctx:
+                brain.create_note("text about nmap", backend="api")
+        self.assertIn("max_tokens", str(ctx.exception))
+        self.assertEqual(self.client.chat.completions.create.call_count, 1, "a retry would burn money")
+        self.assertEqual([r["finish_reason"] for r in self.logged()], ["length"])
+
+    def test_summary_line(self):
+        records = [{"prompt_cache_hit_tokens": 1_000_000, "prompt_cache_miss_tokens": 200_000, "completion_tokens": 50_000},
+                   {"prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 100_000, "completion_tokens": 10_000}]
+        # 1M * 0.003 + 0.3M * 0.15 + 0.06M * 0.6 = 0.003 + 0.045 + 0.036
+        self.assertEqual(llm.usage_summary(records),
+                         "2 calls, 1,000,000 hit / 300,000 miss, 60,000 output, ~$0.0840")
+        self.assertTrue(llm.usage_summary(records[:1]).startswith("1 call, "))
+
+    def run_split(self, answer, *completions):
+        self.answer(*completions)
+        with mock.patch.object(config, "DEFAULT_BACKEND", "api"), \
+             mock.patch.object(sys, "argv", ["kb", "--split", "whois looks up domain owners " * 5]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch.object(llm, "ask_json", REAL_ASK_JSON), \
+             mock.patch("builtins.input", return_value=answer):
+            cli.run()
+        return self.out.getvalue()
+
+    def test_split_ends_with_the_usage_of_its_own_calls(self):
+        llm.usage_records.append({"prompt_cache_hit_tokens": 9, "prompt_cache_miss_tokens": 9,
+                                  "completion_tokens": 9})  # an earlier call in the same process
+        out = self.run_split("", api_completion(self.PLAN, hit=0, miss=1000, out=100),
+                             api_completion(self.NOTE, hit=900, miss=200, out=500),
+                             api_completion('{"category": "01 Networking"}', hit=100, miss=50, out=8))
+        self.assertEqual(self.md_files(), ["01 Networking/whois.md"])
+        self.assertEqual(out.splitlines()[-1], "API usage: 3 calls, 1,000 hit / 1,250 miss, 608 output, ~$0.0006")
+
+    def test_cancelled_split_still_shows_the_planning_call(self):
+        out = self.run_split("cancel", api_completion(self.PLAN, miss=1000, out=100))
+        self.assertEqual(self.md_files(), [])
+        self.assertEqual(out.splitlines()[-1], "API usage: 1 call, 0 hit / 1,000 miss, 100 output, ~$0.0002")
 
 
 if __name__ == "__main__":
