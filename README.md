@@ -1,6 +1,6 @@
 # Cyber Knowledge Engine
 
-A self-hosted, AI-powered pipeline that turns raw cybersecurity learning material — Hack The Box modules, lab writeups, and technical notes — into a clean, atomic, well-organized personal knowledge base in Obsidian.
+
 
 Instead of accumulating dozens of messy, overlapping files, the engine reads source material, decides how it should be split into focused notes (with the user confirming), and writes each note as a professional reference page. It is designed to be a long-lived "second brain" for offensive security study.
 
