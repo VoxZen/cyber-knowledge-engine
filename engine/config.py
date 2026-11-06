@@ -20,9 +20,9 @@ OLLAMA_GEN = "http://localhost:11434/api/generate"
 OLLAMA_EMB = "http://localhost:11434/api/embeddings"
 
 CHAT_MODEL = "qwen3:14b"
-EMBED_MODEL = "nomic-embed-text"
+EMBED_MODEL = "qwen3-embedding:8b"
 
-CANDIDATE_THRESHOLD = 0.60
+CANDIDATE_THRESHOLD = 0.62
 MAX_RETRIES = 2
 NUM_CTX = 8192
 REQUEST_TIMEOUT = 2400

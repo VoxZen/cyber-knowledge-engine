@@ -9,3 +9,7 @@ CKE-TASK.md
 usage.log
 Explanation.md
 server.log.old
+
+# Benchmark data and backups: may hold third-party content, never committed
+benchmark/
+*.bak

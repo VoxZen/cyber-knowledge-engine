@@ -13,6 +13,11 @@ def save_index(index):
 
 
 def similarity(a, b):
+    if len(a) != len(b):
+        # zip() would compare only the first len(shorter) numbers and return a meaningless score
+        raise ValueError(
+            f"embedding sizes differ ({len(a)} vs {len(b)}): the index was built with another "
+            f"embedding model than '{config.EMBED_MODEL}'. Run kb --reembed")
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(x * x for x in b) ** 0.5

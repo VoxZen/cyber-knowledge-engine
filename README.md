@@ -34,7 +34,7 @@ The engine, the vault and the `kb` command live on the server machine. The HTTP 
 | Python | Core engine (parsing, orchestration, validation) |
 | DeepSeek-V4.1-Flash (via API, model `deepseek-flash`) | Primary model — 1M context, up to 384K output tokens, strong at long technical text |
 | Ollama + Qwen 14B (`qwen3:14b`) | Local fallback model for offline use |
-| Ollama + `nomic-embed-text` | Embeddings for finding similar notes — required by every mode except `--delete` |
+| Ollama + `qwen3-embedding:8b` | Embeddings for finding similar notes — required by every mode except `--delete` |
 | Obsidian | Knowledge base (local, category-organized Markdown) |
 | Pydantic | Schema validation with automatic retry on malformed output |
 | Flask | Optional HTTP endpoint (`engine/server.py`) |
@@ -56,7 +56,7 @@ pip install -r requirements.txt
 **2. Install Ollama and pull the models.**
 
 ```bash
-ollama pull nomic-embed-text   # embeddings: required by every mode except --delete
+ollama pull qwen3-embedding:8b # embeddings (~5 GB): required by every mode except --delete
 ollama pull qwen3:14b          # chat model: only needed for kb --local
 ```
 
@@ -122,9 +122,10 @@ Lab writeups follow a different philosophy. Here the engine does not add general
 | Command | Purpose |
 |---|---|
 | `kb` | Create a single new note. If a note with the same filename already exists, nothing is written and `kb --merge` is suggested |
-| `kb --merge` | Merge new information into an existing note. Similar notes are found by embedding similarity (cosine ≥ 0.60) and the user selects the target; if the merged title would rename the file, the user is asked first |
+| `kb --merge` | Merge new information into an existing note. Similar notes are found by embedding similarity (cosine ≥ 0.62) and the user selects the target; if the merged title would rename the file, the user is asked first |
 | `kb --delete` | List and delete a note (keeps the search index in sync) |
 | `kb --reindex` | Report where the search index and the files on disk disagree; repair the index only after you type `yes` |
+| `kb --reembed` | Recompute every vector in the search index with the current `EMBED_MODEL` (needed once after changing it); backs up the old index first and asks for `yes` |
 | `kb --local` | Use the local 14B model instead of the API (offline) |
 | `kb --file <path>` | Read the note text from a file instead of pasting it |
 
@@ -167,7 +168,7 @@ Notes are organized into numbered category folders so Obsidian keeps them ordere
 
 The folder list lives in one place, `engine/config.py`. The classifier only chooses from `00`–`09`; `90 Writeups` is filled by `kb --writeup`. Any other folder in the vault is ignored by the engine.
 
-Each note is plain Markdown: a `# Title`, a one-line summary, then `## Section` blocks. The search index, `.kb_index.json` in the vault root, stores one 768-dimensional embedding per note, keyed by the note's filename.
+Each note is plain Markdown: a `# Title`, a one-line summary, then `## Section` blocks. The search index, `.kb_index.json` in the vault root, stores one embedding per note (4096 numbers with `qwen3-embedding:8b`), keyed by the note's filename. Vectors from different embedding models cannot be compared, so after changing `EMBED_MODEL` run `kb --reembed` once.
 
 The finished notes integrate with an Obsidian AI plugin, which lets the knowledge base be studied back in a tutor/student format — turning the collected notes into an active learning loop.
 

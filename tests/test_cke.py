@@ -972,5 +972,81 @@ class ApiUsageTests(FakeApi, VaultTestCase):
         self.assertEqual(out.splitlines()[-1], "API usage: 1 call, 0 hit / 1,000 miss, 100 output, ~$0.0002")
 
 
+# ---------------------------------------------------------------- embedding model change
+
+class ReembedTests(VaultTestCase):
+    """After EMBED_MODEL changes, old vectors are recomputed, never compared with new ones."""
+
+    OLD = [9.0] * 768  # a vector from the previous model: another size than fake_embed's
+
+    def seed_old(self, slugs):
+        index = {slug: {"vector": self.OLD, "title": title, "category": category}
+                 for slug, (title, category) in slugs.items()}
+        config.INDEX_FILE.write_text(json.dumps(index), encoding="utf-8")
+        return index
+
+    def backups(self):
+        return sorted(p.name for p in TEST_VAULT.glob(".kb_index.backup-*.json"))
+
+    def test_similarity_refuses_vectors_of_different_sizes(self):
+        self.assertTrue(self.raises(ValueError, memory.similarity, fake_embed("a"), self.OLD))
+        self.assertAlmostEqual(memory.similarity([1.0, 0.0], [1.0, 0.0]), 1.0)
+
+    def test_search_against_an_old_index_fails_loudly(self):
+        self.seed_old({"dns": ("DNS", "01 Networking")})
+        self.assertTrue(self.raises(ValueError, memory.find_top_matches, "a query"))
+
+    def test_reembed_recomputes_every_vector_and_keeps_a_backup(self):
+        self.write("01 Networking/dns.md", "# DNS\n\nResolves names.\n\n## Usage\nx\n")
+        self.write("04 Web/xss.md", "# XSS\n\nScript injection.\n\n## Usage\ny\n")
+        old = self.seed_old({"dns": ("DNS", "01 Networking"), "xss": ("XSS", "04 Web")})
+        count, backup = main.reembed_index()
+        self.assertEqual(count, 2)
+        new = self.index()
+        self.assertEqual(new["dns"]["vector"], fake_embed("DNS\nResolves names."))
+        self.assertEqual(new["xss"], {"vector": fake_embed("XSS\nScript injection."), "title": "XSS",
+                                      "category": "04 Web"})
+        self.assertEqual(json.loads(backup.read_text(encoding="utf-8")), old)
+
+    def test_reembed_changes_nothing_when_a_note_file_is_missing(self):
+        self.write("01 Networking/dns.md", "# DNS\n\nResolves names.\n")
+        old = self.seed_old({"dns": ("DNS", "01 Networking"), "gone": ("Gone", "04 Web")})
+        self.assertTrue(self.raises(ValueError, main.reembed_index))
+        self.assertEqual(self.index(), old)
+        self.assertEqual(self.backups(), [])
+        llm.embed.assert_not_called()
+
+    def test_reembed_changes_nothing_when_ollama_fails_half_way(self):
+        self.write("01 Networking/dns.md", "# DNS\n\nResolves names.\n")
+        self.write("04 Web/xss.md", "# XSS\n\nScript injection.\n")
+        old = self.seed_old({"dns": ("DNS", "01 Networking"), "xss": ("XSS", "04 Web")})
+        llm.embed.side_effect = [fake_embed("first"), requests.exceptions.ConnectionError("Ollama is down")]
+        self.assertTrue(self.raises(requests.exceptions.ConnectionError, main.reembed_index))
+        self.assertEqual(self.index(), old)
+
+    def run_reembed(self, answer):
+        with mock.patch.object(sys, "argv", ["kb", "--reembed"]), \
+             mock.patch.object(cli, "check_ollama", return_value=True), \
+             mock.patch("builtins.input", return_value=answer):
+            cli.run()
+        return self.out.getvalue()
+
+    def test_cli_reembed_asks_first_and_cancel_changes_nothing(self):
+        self.write("01 Networking/dns.md", "# DNS\n\nResolves names.\n")
+        old = self.seed_old({"dns": ("DNS", "01 Networking")})
+        out = self.run_reembed("no")
+        self.assertIn("vector sizes now: 768", out)
+        self.assertEqual(self.index(), old)
+        self.assertEqual(self.backups(), [])
+
+    def test_cli_reembed_yes_rewrites_the_index(self):
+        self.write("01 Networking/dns.md", "# DNS\n\nResolves names.\n")
+        self.seed_old({"dns": ("DNS", "01 Networking")})
+        out = self.run_reembed("yes")
+        self.assertIn("Done. 1 notes re-embedded, vector size 3.", out)
+        self.assertEqual(self.index()["dns"]["vector"], fake_embed("DNS\nResolves names."))
+        self.assertEqual(len(self.backups()), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

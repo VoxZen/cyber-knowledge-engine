@@ -296,6 +296,36 @@ def handle_reindex():
         print("Cancelled. Nothing changed.")
 
 
+def handle_reembed():
+    from engine.main import reembed_index
+    index = memory.load_index()
+    sizes = sorted({len(entry["vector"]) for entry in index.values()})
+    print("-" * 50)
+    print(f"Index entries: {len(index)}   vector sizes now: {', '.join(map(str, sizes)) or 'none'}")
+    if not index:
+        print("The index is empty. Nothing to re-embed.")
+        return
+    print(f"Every vector will be recomputed with '{config.EMBED_MODEL}', from each note's title and summary.")
+    print("The old index is copied to a backup file first.")
+    confirm = input("\nRe-embed the whole index? (yes/no): ").strip().lower()
+    if confirm != "yes":
+        print("Cancelled. Nothing changed.")
+        return
+    start = time.time()
+
+    def progress(n, total):
+        if n % 50 == 0 or n == total:
+            print(f"  {n}/{total} re-embedded ({time.time() - start:.0f}s)")
+
+    try:
+        count, backup = reembed_index(progress)
+    except (ValueError, requests.exceptions.RequestException) as e:
+        print(f"ERROR: {e}. The index was not changed.")
+        sys.exit(1)
+    size = len(next(iter(memory.load_index().values()))["vector"])
+    print(f"Done. {count} notes re-embedded, vector size {size}. Old index kept as {backup.name}")
+
+
 def run():
     args = sys.argv[1:]
 
@@ -309,6 +339,10 @@ def run():
 
     if "--reindex" in args:
         handle_reindex()
+        return
+
+    if "--reembed" in args:
+        handle_reembed()
         return
 
     backend = config.DEFAULT_BACKEND

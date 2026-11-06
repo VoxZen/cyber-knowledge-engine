@@ -1,3 +1,6 @@
+import shutil
+from datetime import datetime
+
 from engine import config, memory, vault, brain
 
 
@@ -124,6 +127,40 @@ def repair_index(drift):
         index[slug]["category"] = disk_category
     index.update(new_entries)
     memory.save_index(index)
+
+
+def reembed_index(progress=None):
+    """Recompute every vector in the index with the current config.EMBED_MODEL.
+
+    kb --reindex only adds and removes entries; it never recomputes a vector. After
+    EMBED_MODEL changes the old vectors stay, and vectors from two models cannot be
+    compared. Each note is re-embedded from its title and summary on disk, the same
+    text save_note and repair_index use; the index title and category are kept.
+
+    Every indexed note must have its file in its category (run kb --reindex first).
+    The old index is copied to a backup file, and the new one is written only after
+    every note has a new vector: if Ollama fails half way, the index is left as it was.
+    Returns (number of notes re-embedded, backup path).
+    """
+    index = memory.load_index()
+    if not index:
+        return 0, None
+    missing = [slug for slug, entry in index.items()
+               if not (config.VAULT / entry["category"] / f"{slug}.md").exists()]
+    if missing:
+        raise ValueError(f"{len(missing)} indexed note(s) have no file where the index expects it "
+                         f"(first: {missing[0]}); run kb --reindex first")
+    backup = config.INDEX_FILE.with_name(f".kb_index.backup-{datetime.now():%Y%m%d-%H%M%S}.json")
+    shutil.copy2(config.INDEX_FILE, backup)
+    new_index = {}
+    for n, (slug, entry) in enumerate(index.items(), 1):
+        category = entry["category"]
+        data = vault.markdown_to_json((config.VAULT / category / f"{slug}.md").read_text(encoding="utf-8"))
+        new_index[slug] = memory.embed_entry(data["title"] or slug, data["summary"], category)
+        if progress:
+            progress(n, len(index))
+    memory.save_index(new_index)
+    return len(new_index), backup
 
 
 def delete_note_by_slug(slug):
