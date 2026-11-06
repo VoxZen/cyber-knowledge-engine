@@ -1,6 +1,6 @@
 # Cyber Knowledge Engine
 
-
+A self-hosted, AI-powered pipeline that turns cybersecurity learning material (course modules, technical documentation, lab writeups and personal notes) into a clean, atomic, well-organized personal knowledge base in Obsidian.
 
 Instead of accumulating dozens of messy, overlapping files, the engine reads source material, decides how it should be split into focused notes (with the user confirming), and writes each note as a professional reference page. It is designed to be a long-lived "second brain" for offensive security study.
 
@@ -41,7 +41,7 @@ The engine, the vault and the `kb` command live on the server machine. The HTTP 
 
 ## Setup
 
-Developed and tested on Python 3.14. You also need [Ollama](https://ollama.com) and a DeepSeek API key.
+Developed and tested on Python 3.14; the test suite also passes on Python 3.12. You also need [Ollama](https://ollama.com) and a DeepSeek API key.
 
 **1. Clone and install.** The `kb` launcher runs `cd ~/cke`, so clone to `~/cke` (or edit the script).
 
@@ -98,7 +98,7 @@ To accept requests from other machines, set `SERVER_HOST = "0.0.0.0"` in `engine
 
 Material is sent to the engine from the command line. Depending on the type of source, a different mode is used. Every mode except `--delete` first checks that Ollama is running and has the embedding model, so nothing is written if it is not.
 
-### `kb --split` — Academy modules → atomic notes
+### `kb --split` — course material → atomic notes
 
 Given a block of course material (one or more sections), the engine:
 
@@ -107,7 +107,7 @@ Given a block of course material (one or more sections), the engine:
 3. Writes each confirmed note as a focused reference page and files it under the correct category. A note that already exists is skipped, never overwritten, and listed at the end.
 4. Prints the API usage of the run: calls, input tokens (cache hit / miss), output tokens and an estimated cost. Every API call is also appended to `usage.log` as one JSON line.
 
-A single reconnaissance module, for example, becomes ~40–50 clean atomic notes (`dig.md`, `gobuster.md`, `subdomain-enumeration.md`, …) instead of one giant unreadable file.
+A long document becomes a set of focused notes instead of one giant unreadable file. In the open-licensed evaluation corpus (see [Evaluation](#evaluation)), 73 documents produced 722 atomic notes.
 
 ### `kb --writeup` — machine solutions → writeups
 
@@ -149,7 +149,7 @@ CKE_VAULT=~/Documents/CyberKB python -m unittest discover -s tests -v
 A few deliberate choices shaped the project:
 
 - **"Most capable" is not "most suitable."** DeepSeek V4 was chosen over larger models because the task is long-text structuring, where context window and speed matter more than raw reasoning power.
-- **Two opposite AI philosophies for two kinds of source.** Academy notes use responsible enrichment (the model may add accurate, relevant detail to teach more fully). Writeups use strict fidelity (no additions — only what solved that machine), so writeups stay specific and never blur together.
+- **Two opposite AI philosophies for two kinds of source.** Reference notes (`kb` and `--split`) use responsible enrichment (the model may add accurate, relevant detail to teach more fully). Writeups use strict fidelity (no additions — only what solved that machine), so writeups stay specific and never blur together.
 - **Backend switching.** The same prompts and validation run against either the cloud API or the local model, so the system keeps working offline and can move to fully local inference in the future.
 - **Validation with retry.** Model output (notes and `--split` plans) is validated against a schema; a malformed response is sent back to the model with the validation error and retried, up to two times, keeping the pipeline robust.
 - **Never lose a note.** Creating a note never replaces an existing one (`kb` stops, `--split` skips it). A merge writes the merged note before it removes anything, a merge that would rename a file asks first, and the search index is only updated after the note file is written.
@@ -172,10 +172,14 @@ Each note is plain Markdown: a `# Title`, a one-line summary, then `## Section` 
 
 The finished notes integrate with an Obsidian AI plugin, which lets the knowledge base be studied back in a tutor/student format — turning the collected notes into an active learning loop.
 
+## Evaluation
+
+A human-labelled evaluation of the engine is in progress. CKE was run, unchanged, on 73 openly licensed documents (Wikipedia, OWASP Cheat Sheet Series, OWASP Web Security Testing Guide, PayloadsAllTheThings, Nmap Reference Guide and Microsoft documentation), producing 722 notes. Pairs of these notes are labelled *same*, *related* or *different* by human annotators, to measure how well embedding similarity and the 0.62 candidate threshold match human judgement across four local embedding models. Because enrichment can add content that is not in the source, a sample of notes is also checked against its source documents. The corpus, labels and analysis scripts will be published with the results.
+
 ## Status
 
-The engine is functional end-to-end: multi-mode note creation, atomic splitting with human confirmation, writeup mode, merging, deletion, index repair, and local/cloud backend switching all work. The HTTP server supports plain note creation only. Ongoing work includes extending the full pipeline to the networked client and refining how repeated tools across writeups are handled.
+The engine is functional end-to-end: multi-mode note creation, atomic splitting with human confirmation, writeup mode, merging, deletion, index repair, re-embedding with a new model, and local/cloud backend switching all work. The HTTP server supports plain note creation only. Ongoing work includes extending the full pipeline to the networked client and refining how repeated tools across writeups are handled.
 
 ## About
 
-I built this as a third-year IT student focused on cybersecurity, both to support my own Hack The Box study and to have a real, self-directed engineering project. It sits at the intersection of three things I care about: building software systems (Python, APIs, multi-machine architecture), learning offensive security, and taking the initiative to build my own tools rather than rely on existing ones.
+I built this as a third-year IT student focused on cybersecurity, both to support my own cybersecurity study and to have a real, self-directed engineering project. It sits at the intersection of three things I care about: building software systems (Python, APIs, multi-machine architecture), learning offensive security, and taking the initiative to build my own tools rather than rely on existing ones.
