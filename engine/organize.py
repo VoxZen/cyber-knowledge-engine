@@ -785,7 +785,7 @@ def taxonomy_report():
         for topic in topics_of(tax, category):
             folder = target_folder(topic["name"], counts) if counts else None
             shown = {None: "-", "": "-", OTHER: f"{OTHER}/"}.get(folder, f"{folder}/")
-            lines.append(f"  {counts[topic['name']]:>4}  {topic['name']:<32} {shown:<34} {topic.get('definition', '')}")
+            lines.append(f"  {counts[topic['name']]:>4}  {topic['name']:<36} {shown:<38} {topic.get('definition', '')}")
             if counts[topic["name"]] > config.TOPIC_WARN_MAX:
                 flags.append(f"{category} / {topic['name']}: {counts[topic['name']]} notes, more than "
                              f"{config.TOPIC_WARN_MAX}; consider splitting it")
