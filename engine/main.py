@@ -1,14 +1,15 @@
 import shutil
 from datetime import datetime
 
-from engine import config, memory, vault, brain
+from engine import config, memory, meta, vault, brain
 
 
-def save_note(slug, category, note, replace=False):
+def save_note(slug, category, note, replace=False, block="", folder=None):
     # 1) embedding (network: Ollama may be down)  2) note file  3) index entry.
     # If the network step fails nothing is written; the two disk writes happen side by side.
+    # A new note has no frontmatter block; a merge passes the old note's block and folder.
     entry = memory.embed_entry(note.title, note.summary, category)
-    vault.write_note(slug, category, vault.to_markdown(note), replace=replace)
+    vault.write_note(slug, category, block + vault.to_markdown(note), replace=replace, folder=folder)
     memory.save_entry(slug, entry)
 
 
@@ -37,8 +38,11 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
     existing_md = vault.read_note(target_slug)
     if not existing_md:
         raise RuntimeError(f"Note '{target_slug}' not found")
+    # markdown_to_json leaves the frontmatter out, so the model never sees it;
+    # the block is put back unchanged on the merged note
     existing_json = vault.markdown_to_json(existing_md)
-    _, existing_category = vault.find_note(target_slug)
+    block, _ = meta.split(existing_md)
+    existing_path, existing_category = vault.find_note(target_slug)
 
     print("Step 1/2: structuring new text...")
     new_note = brain.create_note(text, backend=backend)
@@ -65,7 +69,8 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
 
     # Save the merged note and its index entry first; remove the old one only after that succeeded.
     # Only the note being merged into may be replaced.
-    save_note(new_slug, category, merged, replace=new_slug == target_slug)
+    save_note(new_slug, category, merged, replace=new_slug == target_slug,
+              block=block, folder=existing_path.parent)
     if new_slug != target_slug:
         vault.delete_note(target_slug)
         memory.remove_entry(target_slug)
@@ -74,12 +79,8 @@ def merge_into(text, target_slug, backend=None, confirm_rename=None):
     return new_slug
 
 def list_all_notes():
-    notes = []
-    for category_dir in vault.category_dirs():
-        for md_file in sorted(category_dir.glob("*.md")):
-            slug = md_file.stem
-            notes.append((slug, category_dir.name))
-    return notes
+    """(slug, category) for every note, including notes in topic subfolders."""
+    return [(slug, category) for slug, category, _ in vault.iter_note_files()]
 
 
 def notes_on_disk():
@@ -100,11 +101,13 @@ def find_index_drift():
     duplicate slug, and this check must still work so the duplicate can be reported.
     """
     index = memory.load_index()
+    paths = vault.note_paths()
     on_disk = notes_on_disk()
     drift = {"missing_file": [], "wrong_category": [], "not_indexed": [], "duplicate": []}
     for slug, categories in on_disk.items():
         if len(categories) > 1:
-            drift["duplicate"].append((slug, categories))
+            # The folders, so that two copies in one category (two topic subfolders) are told apart
+            drift["duplicate"].append((slug, [vault.relative(path.parent) for path in paths[slug]]))
         elif slug not in index:
             drift["not_indexed"].append((slug, categories[0]))
         elif index[slug].get("category") != categories[0]:
@@ -117,8 +120,9 @@ def repair_index(drift):
     """Make the index match the disk. Duplicates are left for the user to resolve by hand."""
     # Embeddings first (network): if Ollama fails here, the index is not touched at all
     new_entries = {}
+    paths = vault.note_paths()
     for slug, category in drift["not_indexed"]:
-        data = vault.markdown_to_json((config.VAULT / category / f"{slug}.md").read_text(encoding="utf-8"))
+        data = vault.markdown_to_json(paths[slug][0].read_text(encoding="utf-8"))
         new_entries[slug] = memory.embed_entry(data["title"] or slug, data["summary"], category)
     index = memory.load_index()
     for slug in drift["missing_file"]:
@@ -145,8 +149,9 @@ def reembed_index(progress=None):
     index = memory.load_index()
     if not index:
         return 0, None
+    paths = vault.note_paths()
     missing = [slug for slug, entry in index.items()
-               if not (config.VAULT / entry["category"] / f"{slug}.md").exists()]
+               if len(paths.get(slug, [])) != 1 or vault.category_of(paths[slug][0]) != entry["category"]]
     if missing:
         raise ValueError(f"{len(missing)} indexed note(s) have no file where the index expects it "
                          f"(first: {missing[0]}); run kb --reindex first")
@@ -155,7 +160,7 @@ def reembed_index(progress=None):
     new_index = {}
     for n, (slug, entry) in enumerate(index.items(), 1):
         category = entry["category"]
-        data = vault.markdown_to_json((config.VAULT / category / f"{slug}.md").read_text(encoding="utf-8"))
+        data = vault.markdown_to_json(paths[slug][0].read_text(encoding="utf-8"))
         new_index[slug] = memory.embed_entry(data["title"] or slug, data["summary"], category)
         if progress:
             progress(n, len(index))
