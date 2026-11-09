@@ -15,6 +15,19 @@ CLASSIFIER_CATEGORIES = [
 # filled by hand or by a mode (kb --writeup writes to 90 Writeups). Other folders are ignored.
 VAULT_CATEGORIES = CLASSIFIER_CATEGORIES + ["90 Writeups", "91 Templates", "99 Archive"]
 
+# --- Organisation (kb --organize) ---
+# Categories whose notes get a topic, a type and topic subfolders (not 00 Inbox, not 90-99)
+ORGANIZE_CATEGORIES = CLASSIFIER_CATEGORIES[1:]
+# The kind of a note, stored as `type` in its frontmatter
+NOTE_TYPES = ["concept", "technique", "defense", "tool", "process", "reference"]
+# A topic gets its own subfolder from this many notes; smaller topics share Category/Other/
+TOPIC_FOLDER_MIN = 5
+# A topic with more notes than this is flagged as too big (never split automatically)
+TOPIC_WARN_MAX = 40
+TAXONOMY_FILE = VAULT / ".kb_taxonomy.json"
+# One JSON line per kb --split run that created notes (gives kb --organize the module)
+SPLIT_LOG = VAULT / ".kb_split_log.jsonl"
+
 OLLAMA_BASE = "http://localhost:11434"
 OLLAMA_GEN = "http://localhost:11434/api/generate"
 OLLAMA_EMB = "http://localhost:11434/api/embeddings"
