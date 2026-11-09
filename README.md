@@ -34,7 +34,7 @@ The engine, the vault and the `kb` command live on the server machine. The HTTP 
 | Python | Core engine (parsing, orchestration, validation) |
 | DeepSeek-V4.1-Flash (via API, model `deepseek-flash`) | Primary model — 1M context, up to 384K output tokens, strong at long technical text |
 | Ollama + Qwen 14B (`qwen3:14b`) | Local fallback model for offline use |
-| Ollama + `qwen3-embedding:8b` | Embeddings for finding similar notes — required by every mode except `--delete` |
+| Ollama + `qwen3-embedding:8b` | Embeddings for finding similar notes — required by every mode except `--delete`, `--organize` and `--taxonomy` |
 | Obsidian | Knowledge base (local, category-organized Markdown) |
 | Pydantic | Schema validation with automatic retry on malformed output |
 | Flask | Optional HTTP endpoint (`engine/server.py`) |
@@ -96,7 +96,7 @@ To accept requests from other machines, set `SERVER_HOST = "0.0.0.0"` in `engine
 
 ## How It Works
 
-Material is sent to the engine from the command line. Depending on the type of source, a different mode is used. Every mode except `--delete` first checks that Ollama is running and has the embedding model, so nothing is written if it is not.
+Material is sent to the engine from the command line. Depending on the type of source, a different mode is used. Every mode except `--delete`, `--organize` and `--taxonomy` first checks that Ollama is running and has the embedding model, so nothing is written if it is not.
 
 ### `kb --split` — course material → atomic notes
 
@@ -106,6 +106,9 @@ Given a block of course material (one or more sections), the engine:
 2. Shows the proposed notes to the user, who can approve, merge, or drop any of them. A title that is already a note in the vault is marked `[exists: <category>]`; otherwise the most similar existing note, if any, is shown next to it (`≈ hashcat (0.83, 08 Tools)`). Nothing is merged or dropped automatically.
 3. Writes each confirmed note as a focused reference page and files it under the correct category. A note that already exists is skipped, never overwritten, and listed at the end.
 4. Prints the API usage of the run: calls, input tokens (cache hit / miss), output tokens and an estimated cost. Every API call is also appended to `usage.log` as one JSON line.
+5. Appends one line to the split journal, `.kb_split_log.jsonl` in the vault: the time, the module (the name of the `--file`, or none for pasted text), and the notes created and skipped. `kb --organize` reads each note's module from it.
+
+New notes are written to `Category/<slug>.md` without frontmatter; `--split` never assigns a topic. Topics and topic folders come afterwards, from `kb --organize`.
 
 A long document becomes a set of focused notes instead of one giant unreadable file. In the open-licensed evaluation corpus (see [Evaluation](#evaluation)), 73 documents produced 722 atomic notes.
 
@@ -126,6 +129,11 @@ Lab writeups follow a different philosophy. Here the engine does not add general
 | `kb --delete` | List and delete a note (keeps the search index in sync) |
 | `kb --reindex` | Report where the search index and the files on disk disagree; repair the index only after you type `yes` |
 | `kb --reembed` | Recompute every vector in the search index with the current `EMBED_MODEL` (needed once after changing it); backs up the old index first and asks for `yes` |
+| `kb --organize` | Give every note in `01`–`09` a topic and a type, and move it to its topic folder (see [Knowledge Base Structure](#knowledge-base-structure)). Builds a plan, prints it and applies it after `yes` |
+| `kb --organize --dry-run [--plan-out FILE]` | Build and print the plan, optionally save it; change nothing |
+| `kb --organize --apply FILE` | Apply a saved plan (no model calls). Refused if notes were added, removed or moved since the plan was built |
+| `--yes`, `--set-source WORD` | With `--organize`: apply without asking and skip manual moves; set `source` on notes that have none |
+| `kb --taxonomy` | Read-only report: topics per category with note counts, folders and definitions; flags topics over 40 notes, `General` over 25% of a category, and notes without a topic or not in their folder |
 | `kb --local` | Use the local 14B model instead of the API (offline) |
 | `kb --file <path>` | Read the note text from a file instead of pasting it |
 
@@ -168,7 +176,20 @@ Notes are organized into numbered category folders so Obsidian keeps them ordere
 
 The folder list lives in one place, `engine/config.py`. The classifier only chooses from `00`–`09`; `90 Writeups` is filled by `kb --writeup`. Any other folder in the vault is ignored by the engine.
 
-Each note is plain Markdown: a `# Title`, a one-line summary, then `## Section` blocks. The search index, `.kb_index.json` in the vault root, stores one embedding per note (4096 numbers with `qwen3-embedding:8b`), keyed by the note's filename. Vectors from different embedding models cannot be compared, so after changing `EMBED_MODEL` run `kb --reembed` once.
+Each note is plain Markdown: a `# Title`, a one-line summary, then `## Section` blocks. After `kb --organize` it also has a frontmatter block with four keys that CKE owns; other properties added in Obsidian are kept:
+
+```yaml
+---
+topic: "SQL Injection"
+type: technique        # concept, technique, defense, tool, process or reference
+module: "SQL Injection Fundamentals"
+source: htb
+---
+```
+
+A note is identified by its filename, not its location. The top-level folder is its category; the frontmatter is the truth for topic and type, and topic subfolders are derived from it: a topic with 5 or more notes gets `Category/<Topic>/`, smaller topics share `Category/Other/`, and a category where no topic reaches 5 notes has no subfolders. The topics of each category are kept in `.kb_taxonomy.json` in the vault, with a one-sentence definition and aliases. To rename a topic, change its `name` and add the old name to `aliases`; to merge topic B into A, delete B and add `"B"` to A's aliases; then run `kb --organize`. A note moved by hand in Obsidian to another topic folder is detected, and `kb --organize` asks whether the folder or the metadata wins. The frontmatter never reaches the model or the search index.
+
+The search index, `.kb_index.json` in the vault root, stores one embedding per note (4096 numbers with `qwen3-embedding:8b`), keyed by the note's filename. Vectors from different embedding models cannot be compared, so after changing `EMBED_MODEL` run `kb --reembed` once.
 
 The finished notes integrate with an Obsidian AI plugin, which lets the knowledge base be studied back in a tutor/student format — turning the collected notes into an active learning loop.
 
@@ -178,7 +199,7 @@ A human-labelled evaluation of the engine is in progress. CKE was run, unchanged
 
 ## Status
 
-The engine is functional end-to-end: multi-mode note creation, atomic splitting with human confirmation, writeup mode, merging, deletion, index repair, re-embedding with a new model, and local/cloud backend switching all work. The HTTP server supports plain note creation only. Ongoing work includes extending the full pipeline to the networked client and refining how repeated tools across writeups are handled.
+The engine is functional end-to-end: multi-mode note creation, atomic splitting with human confirmation, writeup mode, merging, deletion, index repair, re-embedding with a new model, and local/cloud backend switching all work. Organisation (topics, types, topic folders, `kb --taxonomy`) is a separate step after splitting. The HTTP server supports plain note creation only. Ongoing work includes extending the full pipeline to the networked client and refining how repeated tools across writeups are handled.
 
 ## About
 
