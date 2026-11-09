@@ -1,6 +1,8 @@
+import json
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 import requests
 from engine import main, config, llm, memory, vault
@@ -48,7 +50,7 @@ def report_existing(error):
     print("STOPPED: a note with this filename already exists. Nothing was written.")
     print(f"  title:    {title}")
     print(f"  category: {error.category}")
-    print(f"  file:     {error.category}/{error.slug}.md")
+    print(f"  file:     {error.path}")
     print("To add this text to that note, run kb --merge with the same text and pick it from the list.")
 
 
@@ -109,7 +111,26 @@ def nearest_note(note, cache):
     return cache[key]
 
 
-def handle_split(backend, text):
+def write_split_journal(source_file, created, skipped):
+    """Append one line to the split journal; kb --organize reads the module of each note from it.
+
+    The journal is a record, not part of the split: if it cannot be written, the split still succeeds.
+    """
+    record = {
+        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "module": Path(source_file).stem if source_file else None,
+        "source_file": str(source_file) if source_file else None,
+        "created": created,
+        "skipped": skipped,
+    }
+    try:
+        with open(config.SPLIT_LOG, "a", encoding="utf-8") as journal:
+            journal.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"WARNING: could not write the split journal {config.SPLIT_LOG}: {e}")
+
+
+def handle_split(backend, text, source_file=None):
     from engine.main import propose_split_plan, process_from_plan
 
     text = text.strip()
@@ -217,11 +238,13 @@ def handle_split(backend, text):
         except NoteExistsError as e:
             # One existing note must not stop a 40-note plan: keep it as it is and go on
             spinner.stop()
-            print(f"  skipped (already exists): {e.category}/{e.slug}.md")
-            skipped.append(f"{e.category}/{e.slug}.md")
+            print(f"  skipped (already exists): {e.path}")
+            skipped.append(e.path)
         except Exception as e:
             spinner.stop()
             print(f"  ERROR on '{note['title']}': {e}")
+    if created:
+        write_split_journal(source_file, created, skipped)
     print("-" * 50)
     print(f"Done. Created {len(created)} note(s).")
     if skipped:
@@ -326,11 +349,100 @@ def handle_reembed():
     print(f"Done. {count} notes re-embedded, vector size {size}. Old index kept as {backup.name}")
 
 
+def ask_manual_move(note, folder, derived, folder_is_topic):
+    """kb --organize found a note in a topic folder its metadata does not name. Which side wins?"""
+    print(f"\nManual move: {note.rel}")
+    print(f"  folder:   {folder}")
+    print(f"  metadata: topic '{note.meta.get('topic', '')}', so its folder is '{derived or note.category}'")
+    choices = {"m": "metadata", "s": "skip"}
+    prompt = "[m]etadata wins / [s]kip"
+    if folder_is_topic:
+        choices["f"] = "folder"
+        prompt = "[f]older wins / " + prompt
+    while True:
+        answer = input(f"  {prompt}: ").strip().lower()[:1]
+        if answer in choices:
+            return choices[answer]
+
+
+def option_value(args, name):
+    """The word after `name` in args, or None. Exits when the option is given without a value."""
+    if name not in args:
+        return None
+    i = args.index(name)
+    if i + 1 >= len(args) or args[i + 1].startswith("--"):
+        print(f"Usage: {name} needs a value")
+        sys.exit(1)
+    return args[i + 1]
+
+
+def handle_organize(args, backend):
+    """kb --organize [--dry-run [--plan-out FILE]] [--apply FILE] [--yes] [--set-source WORD]"""
+    from engine import organize
+    yes = "--yes" in args
+    dry_run = "--dry-run" in args
+    plan_out = option_value(args, "--plan-out")
+    plan_in = option_value(args, "--apply")
+    set_source = option_value(args, "--set-source")
+    first_call = len(llm.usage_records)
+    print("-" * 50)
+    try:
+        if plan_in:
+            plan = organize.load_plan(Path(plan_in).expanduser())
+        else:
+            decide = None if (yes or dry_run) else ask_manual_move
+            plan = organize.build_plan(set_source=set_source, backend=backend, decide=decide)
+    except (ValueError, RuntimeError, OSError) as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    finally:
+        calls = llm.usage_records[first_call:]
+        if calls:
+            print(f"API usage: {llm.usage_summary(calls)}")
+    print("\n".join(organize.plan_summary(plan)))
+    if plan_out:
+        organize.save_plan(plan, Path(plan_out).expanduser())
+        print(f"Plan saved to {plan_out}")
+    if dry_run:
+        print("Dry run: nothing was changed.")
+        return
+    if not yes and input("\nApply? (yes/no): ").strip().lower() != "yes":
+        print("Cancelled. Nothing changed.")
+        return
+    try:
+        result = organize.apply_plan(plan)
+    except (organize.PlanMismatchError, ValueError) as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+    print(f"Done. {result['moved']} note(s) moved, {result['updated']} note(s) with new metadata, "
+          f"{len(result['removed_folders'])} empty folder(s) removed"
+          + (", taxonomy written." if result["taxonomy_written"] else "."))
+
+
+def handle_taxonomy():
+    from engine import organize
+    try:
+        print("\n".join(organize.taxonomy_report()))
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        sys.exit(1)
+
+
 def run():
     args = sys.argv[1:]
 
     if "--delete" in args:
         handle_delete()
+        return
+
+    # Organising reads and moves files and asks the chat model; it needs no embedding
+    if "--taxonomy" in args:
+        handle_taxonomy()
+        return
+
+    if "--organize" in args:
+        backend = "local" if "--local" in args else config.DEFAULT_BACKEND
+        handle_organize(args, backend)
         return
 
     # Every other mode needs an embedding, and embeddings always come from Ollama,
@@ -353,9 +465,11 @@ def run():
     if "--split" in args:
         args = [a for a in args if a != "--split"]
         split_text = get_input_text(args)
+        # The file the text came from names the module in the split journal
+        source_file = Path(args[1]).expanduser().resolve() if args[:1] == ["--file"] else None
         first_call = len(llm.usage_records)
         try:
-            handle_split(backend, split_text)
+            handle_split(backend, split_text, source_file=source_file)
         finally:
             # Also after cancel or an error: the planning call is already paid for
             calls = llm.usage_records[first_call:]
