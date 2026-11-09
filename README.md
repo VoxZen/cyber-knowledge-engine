@@ -199,7 +199,7 @@ A human-labelled evaluation of the engine is in progress. CKE was run, unchanged
 
 ## Status
 
-The engine is functional end-to-end: multi-mode note creation, atomic splitting with human confirmation, writeup mode, merging, deletion, index repair, re-embedding with a new model, and local/cloud backend switching all work. Organisation (topics, types, topic folders, `kb --taxonomy`) is a separate step after splitting. The HTTP server supports plain note creation only. Ongoing work includes extending the full pipeline to the networked client and refining how repeated tools across writeups are handled.
+The engine is functional end-to-end: multi-mode note creation, atomic splitting with human confirmation, writeup mode, merging, deletion, index repair, re-embedding with a new model, and local/cloud backend switching all work. Organisation (topics, types, topic folders, `kb --taxonomy`) is a separate step after splitting. `scripts/coverage.py` writes a one-page HTML overview of a vault: a map of categories and topics sized by note count, and a topic table that flags thin, large and weakly linked topics (`python scripts/coverage.py --lang en|az`; default output `<vault>/.kb_coverage.html`). The HTTP server supports plain note creation only. Ongoing work includes extending the full pipeline to the networked client and refining how repeated tools across writeups are handled.
 
 ## About
 
